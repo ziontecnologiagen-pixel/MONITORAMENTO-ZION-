@@ -2,91 +2,122 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# Configuração da página para ocupar a tela inteira
+# 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Zion - Torre de Controle", layout="wide")
 
-# Estilização customizada para parecer com os seus relatórios
+# 2. ESTILIZAÇÃO CSS (CORRIGIDO)
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
-    .stTable { background-color: white; border-radius: 10px; }
+    .stTable { background: white; border-radius: 8px; }
+    div[data-testid="stExpander"] { background: white; border-radius: 8px; }
     </style>
-    """, unsafe_allow_index=True)
+    """, unsafe_allow_html=True)
 
+# --- TÍTULO PRINCIPAL ---
 st.title("🚢 Sistema Integrado Zion: Rancho & ODM")
+st.markdown("---")
 
-# --- FILTROS ---
+# 3. BARRA LATERAL (FILTROS)
 with st.sidebar:
-    st.header("Filtros de Visão")
-    empurrador_selecionado = st.selectbox("Escolha o Empurrador:", ["TODOS", "BRENO", "IPE", "AROEIRA", "CUMARU"])
-    periodo = st.date_input("Período de Análise")
+    st.image("https://www.gstatic.com/images/branding/product/2x/sheets_2020q4_48dp.png", width=50)
+    st.header("Painel de Controle")
+    empurrador_selecionado = st.selectbox(
+        "Filtrar por Empurrador:",
+        ["TODOS", "BRENO", "IPE", "AROEIRA", "CUMARU", "JATOBA"]
+    )
+    st.info("O Dashboard atualiza automaticamente conforme a planilha.")
 
-# --- SEÇÃO 1: PROGRAMAÇÃO (FUTURO) ---
-st.header("📅 TELA DE PROGRAMAÇÃO (PENDENTES)")
+# 4. TELA DE PROGRAMAÇÃO (FUTURO)
+st.subheader("📅 1. TELA DE PROGRAMAÇÃO (PENDENTES)")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("🥪 Rancho")
-    # Aqui simulamos os dados que você enviou nas imagens
+    st.markdown("#### 🥪 Rancho")
+    # Exemplo de dados para visualização
     df_prog_rancho = pd.DataFrame({
-        'E/M': ['BRENO', 'IPE', 'AROEIRA'],
-        'Data Prevista': ['12/03/26', '11/03/26', '22/03/26'],
-        'Local': ['MIR', 'BEL', 'BEL']
+        'Empurrador': ['BRENO', 'IPE', 'AROEIRA'],
+        'Data Prevista': ['12/03/26', '14/03/26', '15/03/26'],
+        'Local': ['MIR', 'BEL', 'SAN']
     })
     st.table(df_prog_rancho)
 
 with col2:
-    st.subheader("⛽ ODM")
+    st.markdown("#### ⛽ ODM")
     df_prog_odm = pd.DataFrame({
-        'E/M': ['BRENO', 'IPE', 'AROEIRA'],
-        'Volume Previsto': ['20.000 L', '25.000 L', '25.000 L'],
-        'SLA': ['EM ABERTO', 'EM ABERTO', 'EM ABERTO']
+        'Empurrador': ['BRENO', 'IPE', 'AROEIRA'],
+        'Volume (Lts)': ['20.000 L', '25.000 L', '15.000 L'],
+        'Data Prevista': ['15/03/26', '16/03/26', '16/03/26']
     })
     st.table(df_prog_odm)
 
-st.divider()
+st.markdown("---")
 
-# --- SEÇÃO 2: REALIZADOS (HISTÓRICO) ---
-st.header("✅ TELA DE REALIZADOS (CONCLUÍDOS)")
+# 5. TELA DE REALIZADOS (HISTÓRICO)
+st.subheader("✅ 2. TELA DE REALIZADOS (CONCLUÍDOS)")
 col3, col4 = st.columns(2)
 
 with col3:
-    st.subheader("🥪 Rancho Realizado")
+    st.markdown("#### 🥪 Rancho Realizado")
     df_real_rancho = pd.DataFrame({
-        'E/M': ['BRENO', 'CUMARU'],
-        'Data Entrega': ['09/03/26', '08/03/26'],
-        'Status': ['CONCLUÍDO', 'CONCLUÍDO']
+        'Empurrador': ['BRENO', 'CUMARU', 'JATOBA'],
+        'Data Entrega': ['09/03/26', '08/03/26', '07/03/26'],
+        'Status': ['CONCLUÍDO', 'CONCLUÍDO', 'CONCLUÍDO']
     })
     st.table(df_real_rancho)
 
 with col4:
-    st.subheader("⛽ ODM Realizado")
+    st.markdown("#### ⛽ ODM Realizado")
     df_real_odm = pd.DataFrame({
-        'E/M': ['BRENO', 'CUMARU'],
-        'SLA Final': ['192 Hs', 'EM ABERTO'],
-        'Dias': ['8.0 d', '- d']
+        'Empurrador': ['BRENO', 'CUMARU', 'JATOBA'],
+        'Data Realizada': ['05/03/26', '06/03/26', '05/03/26'],
+        'SLA Final': ['192 Hs', '120 Hs', '72 Hs']
     })
     st.table(df_real_odm)
 
-st.divider()
+st.markdown("---")
 
-# --- SEÇÃO 3: DASHBOARDS DE CONSUMO ---
-st.header("📊 DASHBOARD DE CONSUMO POR EMPURRADOR")
-tab1, tab2 = st.tabs(["📉 Evolução ODM", "🍲 Evolução Rancho"])
+# 6. DASHBOARDS DE CONSUMO (GRÁFICOS DE LINHA)
+st.subheader(f"📊 3. DASHBOARD DE CONSUMO - {empurrador_selecionado}")
+tab1, tab2 = st.tabs(["📉 Consumo ODM (Combustível)", "🍲 Gasto Rancho (Suprimentos)"])
 
 with tab1:
-    # Gráfico de linha para ODM (Forecast vs Comprado)
+    # Gráfico de linha para ODM (Comparativo Forecast vs Realizado)
+    meses = ['Janeiro', 'Fevereiro', 'Março']
+    forecast_odm = [35000, 42000, 38000]
+    realizado_odm = [32000, 45000, 20000] # Onde 20k é o parcial de março
+
     fig_odm = go.Figure()
-    fig_odm.add_trace(go.Scatter(x=['Jan', 'Fev', 'Mar'], y=[35000, 40000, 35000], name='Forecast', line=dict(color='#007bff', width=4)))
-    fig_odm.add_trace(go.Scatter(x=['Jan', 'Fev', 'Mar'], y=[15000, 25000, 15000], name='Comprado', line=dict(color='#d9534f', width=4)))
-    fig_odm.update_layout(title="Consumo de Combustível (Lts)", template="plotly_white")
+    fig_odm.add_trace(go.Scatter(x=meses, y=forecast_odm, name='Forecast (Lts)', line=dict(color='#007bff', width=3)))
+    fig_odm.add_trace(go.Scatter(x=meses, y=realizado_odm, name='Realizado (Lts)', line=dict(color='#d9534f', width=3)))
+    
+    fig_odm.update_layout(
+        title="Evolução de Consumo ODM",
+        xaxis_title="Mês",
+        yaxis_title="Litros",
+        template="plotly_white",
+        hovermode="x unified"
+    )
     st.plotly_chart(fig_odm, use_container_width=True)
 
 with tab2:
     # Gráfico de linha para Rancho
+    forecast_rancho = [15000, 15000, 15000]
+    realizado_rancho = [14200, 16800, 9500]
+
     fig_rancho = go.Figure()
-    fig_rancho.add_trace(go.Scatter(x=['Jan', 'Fev', 'Mar'], y=[5000, 7000, 6500], name='Gasto Rancho', line=dict(color='#28a745', dash='dot')))
-    fig_rancho.update_layout(title="Gastos com Rancho (R$)", template="plotly_white")
+    fig_rancho.add_trace(go.Scatter(x=meses, y=forecast_rancho, name='Previsto (R$)', line=dict(color='#28a745', width=3, dash='dot')))
+    fig_rancho.add_trace(go.Scatter(x=meses, y=realizado_rancho, name='Gasto Real (R$)', line=dict(color='#ff8c00', width=3)))
+    
+    fig_rancho.update_layout(
+        title="Evolução de Custos com Rancho",
+        xaxis_title="Mês",
+        yaxis_title="Valor em R$",
+        template="plotly_white",
+        hovermode="x unified"
+    )
     st.plotly_chart(fig_rancho, use_container_width=True)
 
-st.info("ZION TECNOLOGIA - Torre de Controle Operacional v1.0")
+# RODAPÉ
+st.markdown("---")
+st.caption("Desenvolvido por ZION TECNOLOGIA | Monitoramento Operacional 2026")
