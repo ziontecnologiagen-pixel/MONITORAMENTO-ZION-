@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from urllib.parse import quote
 
-# 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Zion - Dashboard Executivo", layout="wide")
+# 1. CONFIGURAÇÃO
+st.set_page_config(page_title="Zion - Análise de Forecast", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 NOME_ABA = "ODM MARÇO"
@@ -12,64 +12,72 @@ NOME_ABA_URL = quote(NOME_ABA)
 @st.cache_data(ttl=60)
 def carregar_dados():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={NOME_ABA_URL}"
-    # Lemos as colunas necessárias (A até O)
-    df = pd.read_csv(url, usecols=range(15))
-    df.columns = df.columns.str.strip().str.upper()
-    df = df.dropna(subset=['EMPURRADOR'])
-    
-    # Tratamento de dados para cálculo
-    df['LITROS_NUM'] = pd.to_numeric(df['COMPRA LITROS'].astype(str).str.upper().str.replace('L', '', regex=False).str.replace('.', '', regex=False).str.strip(), errors='coerce').fillna(0)
-    df['VALOR_NUM'] = pd.to_numeric(df['TOTAL'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(), errors='coerce').fillna(0)
-    
-    return df
-
-st.title("🚢 Monitoramento Estratégico Zion - ODM")
-st.markdown("---")
+    # Lemos até a coluna O (índice 14) para o operacional e buscamos a coluna U (índice 20) para o Forecast
+    df_completo = pd.read_csv(url)
+    df_completo.columns = df_completo.columns.str.strip().str.upper()
+    return df_completo
 
 try:
-    df = carregar_dados()
-
-    # --- TABELA 1: RESUMO CONSOLIDADO POR EMPURRADOR ---
-    st.subheader("📊 Resumo de Consumo por Empurrador")
+    df_full = carregar_dados()
     
-    # Criando o resumo agrupado
-    resumo = df.groupby('EMPURRADOR').apply(lambda x: pd.Series({
-        'LTS REALIZADO': x[x['STATUS'].str.contains('REALIZADO', na=False, case=False)]['LITROS_NUM'].sum(),
+    # --- PROCESSAMENTO DOS DADOS ---
+    # 1. Lista de Forecast (Coluna U - Baseada na imagem image_4ec31d.png)
+    # Nota: Como o CSV traz nomes genéricos para colunas distantes, mapeamos a coluna 'U' que é o 21º índice
+    lista_forecast = df_full.iloc[:, 20].dropna().unique().tolist()
+    
+    # 2. Dados Operacionais (B2 até O50)
+    df_operacional = df_full.iloc[0:50, 0:15].copy()
+    df_operacional = df_operacional.dropna(subset=['EMPURRADOR'])
+    
+    # Limpeza de valores para cálculo
+    df_operacional['VALOR_NUM'] = pd.to_numeric(df_operacional['TOTAL'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce').fillna(0)
+    df_operacional['LTS_NUM'] = pd.to_numeric(df_operacional['COMPRA LITROS'].astype(str).str.upper().str.replace('L', '', regex=False).str.replace('.', '', regex=False), errors='coerce').fillna(0)
+
+    st.title("🚢 Análise de Forecast vs Realizado - Zion")
+
+    # --- TABELA 1: RESUMO POR EMPURRADOR ---
+    st.subheader("📊 Comparativo Mensal por Ativo")
+    
+    resumo = df_operacional.groupby('EMPURRADOR').apply(lambda x: pd.Series({
+        'LTS REALIZADO': x[x['STATUS'].str.contains('REALIZADO', na=False, case=False)]['LTS_NUM'].sum(),
         'VALOR REALIZADO': x[x['STATUS'].str.contains('REALIZADO', na=False, case=False)]['VALOR_NUM'].sum(),
-        'LTS PROGRAMADO': x[x['STATUS'].str.contains('PROGRAMADO', na=False, case=False)]['LITROS_NUM'].sum(),
+        'LTS PROGRAMADO': x[x['STATUS'].str.contains('PROGRAMADO', na=False, case=False)]['LTS_NUM'].sum(),
         'VALOR PROGRAMADO': x[x['STATUS'].str.contains('PROGRAMADO', na=False, case=False)]['VALOR_NUM'].sum()
     })).reset_index()
 
-    # Formatação para exibição amigável
-    resumo_view = resumo.copy()
-    for col in ['VALOR REALIZADO', 'VALOR PROGRAMADO']:
-        resumo_view[col] = resumo_view[col].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-    for col in ['LTS REALIZADO', 'LTS PROGRAMADO']:
-        resumo_view[col] = resumo_view[col].apply(lambda x: f"{x:,.0f} L".replace(',', '.'))
+    st.table(resumo.style.format({
+        'LTS REALIZADO': '{:,.0f} L', 'LTS PROGRAMADO': '{:,.0f} L',
+        'VALOR REALIZADO': 'R$ {:,.2f}', 'VALOR PROGRAMADO': 'R$ {:,.2f}'
+    }))
 
-    st.table(resumo_view) # Usando st.table para ficar mais "limpo" e fixo
-
-    st.markdown("---")
-
-    # --- TABELA 2: APENAS PROGRAMADOS (VISÃO COMPACTA) ---
-    st.subheader("⏳ Próximas Cargas Programadas")
+    # --- ANÁLISE DE IMPACTO (EXTRAPLANO) ---
+    total_realizado_geral = resumo['VALOR REALIZADO'].sum()
+    empurradores_operacionais = resumo['EMPURRADOR'].unique()
     
-    df_prog = df[df['STATUS'].str.contains('PROGRAMADO', na=False, case=False)]
+    st.markdown("### ⚠️ Alertas de Forecast")
+    fora_do_plano = [em for em in empurradores_operacionais if em not in lista_forecast]
     
-    if not df_prog.empty:
-        # Selecionando colunas B(DATA SOLIC), C(EMPURRADOR), D(LOCAL), F(COMPRA LITROS), L(STATUS)
-        # Nota: O índice do Python começa em 0, então B=1, C=2, D=3, F=5, L=11
-        colunas_indices = [1, 2, 3, 5, 11]
-        colunas_nomes = [df.columns[i] for i in colunas_indices]
-        
-        df_compacto = df_prog[colunas_nomes]
-        
-        # Exibição compacta sem barra de rolagem se possível
-        st.dataframe(df_compacto, use_container_width=True, hide_index=True)
+    if fora_do_plano:
+        for em in fora_do_plano:
+            valor_em = resumo[resumo['EMPURRADOR'] == em]['VALOR REALIZADO'].sum()
+            percentual = (valor_em / total_realizado_geral * 100) if total_realizado_geral > 0 else 0
+            st.warning(f"O E/M **{em}** não estava no forecast de Março. Impacto: **{percentual:.2f}%** da representatividade do total realizado.")
     else:
-        st.info("Não há programações pendentes.")
+        st.success("Todos os empurradores estão dentro do planejado (Forecast).")
+
+    st.divider()
+
+    # --- TABELA 2: REALIZADOS DETALHADO (COMPACTO) ---
+    st.subheader("✅ Detalhamento de Cargas Realizadas")
+    df_real = df_operacional[df_operacional['STATUS'].str.contains('REALIZADO', na=False, case=False)]
+    
+    if not df_real.empty:
+        # Colunas pedidas: Empurrador | Compra Litros | SC | Pedido | SLA | Entrega
+        # Ajustamos para os nomes exatos que estão na sua planilha
+        colunas_finais = ['EMPURRADOR', 'COMPRA LITROS', 'SC', 'PEDIDO', 'SLA PC', 'DT ENTREGA']
+        st.dataframe(df_real[colunas_finais], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma carga realizada para exibir.")
 
 except Exception as e:
-    st.error(f"Erro ao gerar dashboard: {e}")
-
-st.caption("Visualização simplificada para tomada de decisão rápida.")
+    st.error(f"Erro na análise: {e}")
