@@ -24,7 +24,19 @@ def limpar_moeda(coluna):
         coluna.astype(str)
         .str.replace('R$', '', regex=False)
         .str.replace('.', '', regex=False)
-        .str.replace(',', '.', regex=False), 
+        .str.replace(',', '.', regex=False)
+        .str.strip(), 
+        errors='coerce'
+    ).sum()
+
+def limpar_litros(coluna):
+    """Remove o 'L' e os pontos para conseguir somar os litros"""
+    return pd.to_numeric(
+        coluna.astype(str)
+        .str.upper()
+        .str.replace('L', '', regex=False)
+        .str.replace('.', '', regex=False)
+        .str.strip(),
         errors='coerce'
     ).sum()
 
@@ -41,10 +53,10 @@ try:
         df_prog = df_odm[df_odm['STATUS'].astype(str).str.upper().str.contains('PROGRAMADO', na=False)]
         
         if not df_prog.empty:
-            # MÉTRICAS LADO A LADO
             col1, col2 = st.columns(2)
             with col1:
-                total_lts_prog = pd.to_numeric(df_prog['COMPRA LITROS'], errors='coerce').sum()
+                # Soma litros limpando o "L" e o ponto
+                total_lts_prog = limpar_litros(df_prog['COMPRA LITROS'])
                 st.metric("Litros Programados", f"{total_lts_prog:,.0f} L".replace(',', '.'))
             with col2:
                 total_val_prog = limpar_moeda(df_prog['TOTAL'])
@@ -63,10 +75,10 @@ try:
         df_real = df_odm[df_odm['STATUS'].astype(str).str.upper().str.contains('REALIZADO', na=False)]
         
         if not df_real.empty:
-            # MÉTRICAS LADO A LADO
             col3, col4 = st.columns(2)
             with col3:
-                total_lts_real = pd.to_numeric(df_real['COMPRA LITROS'], errors='coerce').sum()
+                # Soma litros do que já foi entregue
+                total_lts_real = limpar_litros(df_real['COMPRA LITROS'])
                 st.metric("Litros Realizados", f"{total_lts_real:,.0f} L".replace(',', '.'))
             with col4:
                 total_val_real = limpar_moeda(df_real['TOTAL'])
@@ -78,5 +90,3 @@ try:
 
 except Exception as e:
     st.error(f"Erro ao processar dados: {e}")
-
-st.caption("Dados espelhados da Planilha Matriz em tempo real.")
