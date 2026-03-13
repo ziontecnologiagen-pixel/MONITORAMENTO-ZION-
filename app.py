@@ -1,58 +1,70 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+from datetime import datetime
 
-# 1. CONFIGURAÇÕES DA PÁGINA
-st.set_page_config(page_title="Zion - Torre de Controle", layout="wide")
+# 1. CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(page_title="Zion - Monitoramento ODM", layout="wide")
 
-# Link base da sua planilha
+# Link da sua planilha
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
+# O GID da aba "ODM MARÇO" (Se não for esse, o código tentará pelo nome)
+# Nota: Para link público, o ideal é usar o nome da aba codificado ou o GID 0 se for a primeira.
+ABA_NOME = "ODM MARÇO"
 
-# IDs das abas (GIDs) que vimos no seu vídeo
-GID_RANCHO = "1366334206"
-GID_ODM = "0" # Geralmente a primeira aba é 0, se não funcionar tentaremos o ID específico
+@st.cache_data(ttl=60) # Atualiza a cada 1 minuto
+def carregar_dados_odm():
+    # URL formatada para ler a aba específica pelo nome
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=ODM+MARÇO"
+    df = pd.read_csv(url)
+    
+    # Limpeza básica para evitar erro de linha vazia no importrange
+    df = df.dropna(subset=['EMPURRADOR'])
+    return df
 
-@st.cache_data(ttl=600) # Atualiza a cada 10 minutos
-def carregar_dados(gid):
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid}"
-    return pd.read_csv(url)
-
-st.title("🚢 Zion Tecnologia - Monitoramento Integrado")
-st.markdown("---")
+st.title("⛽ Gestão de Combustível - Zion")
+st.subheader(f"📅 Aba: {ABA_NOME}")
 
 try:
-    # Carregando os dados
-    df_rancho = carregar_dados(GID_RANCHO)
-    df_odm = carregar_dados(GID_ODM)
+    df_odm = carregar_dados_odm()
 
-    # --- SEÇÃO RANCHO ---
-    st.subheader("🥪 1. PROGRAMAÇÃO DE RANCHO")
-    if not df_rancho.empty:
-        # Mostra as colunas que vimos no vídeo
-        cols_r = ['EMPURRADOR', 'LIMITE PEDIDO', 'PRÓXIMO']
-        # Filtra apenas se as colunas existirem
-        disponiveis = [c for c in cols_r if c in df_rancho.columns]
-        st.dataframe(df_rancho[disponiveis], use_container_width=True)
+    # --- BLOCO 1: PROGRAMADO ---
+    # Filtra onde a coluna STATUS (ou SITUAÇÃO) contém "PROGRAMADO"
+    # No vídeo, vi que você usa a coluna STATUS para definir o fluxo
+    df_prog = df_odm[df_odm['STATUS'].str.contains('PROGRAMADO', na=False, case=False)]
     
-    st.divider()
+    st.markdown("### ⏳ 1. CARGAS PROGRAMADAS (A REALIZAR)")
+    if not df_prog.empty:
+        # Colunas que interessam para quem está esperando a carga
+        cols_prog = ['DATA SOLIC', 'EMPURRADOR', 'LOCAL', 'COMPRA LITROS', 'STATUS']
+        # Filtra apenas as colunas que realmente existem na sua aba
+        cols_finais_p = [c for c in cols_prog if c in df_prog.columns]
+        st.dataframe(df_prog[cols_finais_p], use_container_width=True, hide_index=True)
+    else:
+        st.info("Não há cargas com status 'PROGRAMADO' no momento.")
 
-    # --- SEÇÃO ODM ---
-    st.subheader("⛽ 2. MONITORAMENTO ODM (COM MARÇO)")
-    if not df_odm.empty:
-        st.dataframe(df_odm, use_container_width=True)
+    st.markdown("---")
 
-    # --- SEÇÃO GRÁFICOS ---
-    st.divider()
-    st.subheader("📊 3. EVOLUÇÃO DE CONSUMO")
+    # --- BLOCO 2: REALIZADO ---
+    # Filtra onde o status é "REALIZADO"
+    df_real = df_odm[df_odm['STATUS'].str.contains('REALIZADO', na=False, case=False)]
     
-    # Exemplo de gráfico com dados da planilha
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=[100, 150, 130], name='Previsto', line=dict(color='blue', width=3)))
-    fig.add_trace(go.Scatter(y=[90, 160, 120], name='Realizado', line=dict(color='red', width=3)))
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("### ✅ 2. CARGAS REALIZADAS (HISTÓRICO)")
+    if not df_real.empty:
+        # Colunas para conferência do que já foi entregue
+        cols_real = ['DT ENTREGA', 'EMPURRADOR', 'LOCAL', 'VL UNT LTS', 'TOTAL', 'STATUS']
+        cols_finais_r = [c for c in cols_real if c in df_real.columns]
+        st.dataframe(df_real[cols_finais_r], use_container_width=True, hide_index=True)
+        
+        # Cálculo de quanto já foi realizado no mês
+        if 'TOTAL' in df_real.columns:
+            # Remove R$ e converte para número para somar
+            total_valor = df_real['TOTAL'].replace(r'[\R\$,]', '', regex=True).astype(float).sum()
+            st.metric("Total Gasto no Mês (Realizado)", f"R$ {total_valor:,.2f}")
+    else:
+        st.warning("Nenhuma carga com status 'REALIZADO' encontrada.")
 
 except Exception as e:
-    st.error(f"Erro ao conectar com a planilha: {e}")
-    st.info("Certifique-se de que a planilha está compartilhada como 'Qualquer pessoa com o link'.")
+    st.error(f"Erro ao acessar a aba '{ABA_NOME}': {e}")
+    st.info("Verifique se o nome da aba na sua planilha é exatamente 'ODM MARÇO' (com espaço e sem aspas).")
 
-st.caption("Atualizado em tempo real via Google Sheets")
+st.caption(f"Sincronizado com a Matriz Zion às {datetime.now().strftime('%H:%M:%S')}")
