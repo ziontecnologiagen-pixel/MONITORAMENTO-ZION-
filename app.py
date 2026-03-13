@@ -1,28 +1,17 @@
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
+from datetime import datetime
 
-# 1. CONFIGURAÇÃO DE TELA (Removido o 'wide' para centralizar naturalmente)
-st.set_page_config(page_title="Zion - Dashboard", layout="centered")
+# 1. CONFIGURAÇÃO (Centralizado e Compacto)
+st.set_page_config(page_title="Zion - Monitoramento", layout="centered")
 
-# CSS para forçar a compactação e centralização
 st.markdown("""
     <style>
-    /* Limita a largura da página para não espalhar no monitor */
-    .main .block-container {
-        max-width: 900px;
-        padding-top: 1rem;
-    }
-    
-    /* Reduz drasticamente o tamanho das fontes e células */
+    .main .block-container { max-width: 850px; padding-top: 1rem; }
     [data-testid="stMetricValue"] {font-size: 1.1rem !important;}
-    [data-testid="stMetricLabel"] {font-size: 0.7rem !important;}
-    h3 {font-size: 1rem !important; margin-bottom: 0.2rem;}
-    
-    /* Remove espaços entre tabelas e elementos */
+    h3 {font-size: 1rem !important; margin-bottom: 0.2rem; font-weight: bold;}
     [data-testid="stVerticalBlock"] {gap: 0.4rem !important;}
-    
-    /* Estilo para as tabelas ficarem mais densas */
     .stDataFrame {font-size: 12px !important;}
     </style>
     """, unsafe_allow_html=True)
@@ -36,77 +25,82 @@ def carregar_dados():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={NOME_ABA_URL}"
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip().str.upper()
+    
+    # Tratamento de Data para o Robô comparar com "Hoje"
+    # Assume formato DD/MM/YYYY ou similar que o pandas reconheça
+    df['DATA_DT'] = pd.to_datetime(df['DATA SOLIC'], dayfirst=True, errors='coerce')
+    
     return df
 
 try:
     df_full = carregar_dados()
+    hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # --- PROCESSAMENTO OPERACIONAL ---
+    df_op = df_full.iloc[0:100, 0:15].copy()
+    col_emp = df_op.columns[2] # EMPURRADOR
     
-    # --- FORECAST ---
-    bloco_forecast = df_full.iloc[0:20, 20:27].astype(str).apply(lambda x: x.str.strip().str.upper())
-    lista_forecast = set(pd.unique(bloco_forecast.values.ravel()))
-    
-    # --- OPERACIONAL ---
-    df_op = df_full.iloc[0:80, 0:15].copy()
-    col_emp = df_op.columns[2]
-    df_op = df_op.dropna(subset=[col_emp])
-    
+    # Limpeza para cálculos de cabeçalho
     df_op['VALOR_NUM'] = pd.to_numeric(df_op['TOTAL'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(), errors='coerce').fillna(0)
     df_op['LTS_NUM'] = pd.to_numeric(df_op['COMPRA LITROS'].astype(str).str.upper().str.replace('L', '', regex=False).str.replace('.', '', regex=False).str.strip(), errors='coerce').fillna(0)
-    df_op['EMP_KEY'] = df_op[col_emp].astype(str).str.strip().str.upper()
 
-    st.title("🚢 Monitoramento Zion")
+    st.title("⛽ Gestão de Cargas Zion")
 
-    # --- TABELA 1 ---
-    resumo = df_op.groupby('EMP_KEY').apply(lambda x: pd.Series({
-        'REAL (L)': x[x['STATUS'].astype(str).str.upper().str.contains('REALIZADO', na=False)]['LTS_NUM'].sum(),
-        'REAL (R$)': x[x['STATUS'].astype(str).str.upper().str.contains('REALIZADO', na=False)]['VALOR_NUM'].sum(),
-        'PROG (L)': x[x['STATUS'].astype(str).str.upper().str.contains('PROGRAMADO', na=False)]['LTS_NUM'].sum(),
-        'PROG (R$)': x[x['STATUS'].astype(str).str.upper().str.contains('PROGRAMADO', na=False)]['VALOR_NUM'].sum()
-    })).reset_index().rename(columns={'EMP_KEY': 'ATIVO'})
-
-    st.markdown("### 📊 Consumo Consolidado")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Realizado L", f"{resumo['REAL (L)'].sum():,.0f}L".replace(',', '.'))
-    c2.metric("Realizado R$", f"R${resumo['REAL (R$)'].sum():,.0f}".replace(',', '.'))
-    c3.metric("Prog. L", f"{resumo['PROG (L)'].sum():,.0f}L".replace(',', '.'))
-    c4.metric("Prog. R$", f"R${resumo['PROG (R$)'].sum():,.0f}".replace(',', '.'))
-
-    st.dataframe(
-        resumo,
-        use_container_width=True, hide_index=True,
-        column_config={
-            "ATIVO": st.column_config.TextColumn("Ativo", width=120),
-            "REAL (L)": st.column_config.NumberColumn("Real L", width=80, format="%d"),
-            "REAL (R$)": st.column_config.NumberColumn("Real R$", width=100, format="R$ %d"),
-            "PROG (L)": st.column_config.NumberColumn("Prog L", width=80, format="%d"),
-            "PROG (R$)": st.column_config.NumberColumn("Prog R$", width=100, format="R$ %d")
-        }
-    )
-
-    # --- ALERTAS ---
-    alertas = [f"⚠️ **{r['ATIVO']}** fora" for _, r in resumo.iterrows() if r['REAL (R$)'] > 0 and r['ATIVO'] not in lista_forecast]
-    if alertas:
-        cols = st.columns(len(alertas))
-        for i, a in enumerate(alertas): cols[i].warning(a)
-
-    # --- TABELA 2 ---
-    st.markdown("---")
-    st.markdown("### ✅ Detalhes Realizados")
-    df_real = df_op[df_op['STATUS'].astype(str).str.upper().str.contains('REALIZADO', na=False)]
+    # --- TABELA 1: PROGRAMADO (DE HOJE PARA FRENTE) ---
+    st.markdown("### ⏳ Programado (A partir de Hoje)")
     
-    if not df_real.empty:
+    # Filtro: Status Programado + Data >= Hoje
+    df_prog = df_op[
+        (df_op['STATUS'].astype(str).str.upper().str.contains('PROGRAMADO', na=False)) & 
+        (df_full['DATA_DT'] >= hoje)
+    ]
+    
+    if not df_prog.empty:
+        # Cabeçalho de Totais para Programados
+        p1, p2 = st.columns(2)
+        p1.metric("Total Programado (L)", f"{df_prog['LTS_NUM'].sum():,.0f}L".replace(',', '.'))
+        p2.metric("Total Programado (R$)", f"R${df_prog['VALOR_NUM'].sum():,.0f}".replace(',', '.'))
+        
+        # Colunas: Empurrador | SC | Local | Entrega
         st.dataframe(
-            df_real[[col_emp, 'COMPRA LITROS', 'SC', 'PEDIDO', 'SLA PC', 'DT ENTREGA']],
+            df_prog[[col_emp, 'SC', 'LOCAL', 'DT ENTREGA']],
             use_container_width=True, hide_index=True,
             column_config={
-                col_emp: st.column_config.TextColumn("Ativo", width=120),
-                "COMPRA LITROS": st.column_config.TextColumn("Lts", width=70),
-                "SC": st.column_config.TextColumn("SC", width=70),
-                "PEDIDO": st.column_config.TextColumn("Pedido", width=80),
-                "SLA PC": st.column_config.TextColumn("SLA", width=60),
+                col_emp: st.column_config.TextColumn("Empurrador", width=150),
+                "SC": st.column_config.TextColumn("SC", width=80),
+                "LOCAL": st.column_config.TextColumn("Local", width=120),
                 "DT ENTREGA": st.column_config.TextColumn("Entrega", width=100)
             }
         )
+    else:
+        st.info("Nenhuma carga programada para datas futuras.")
+
+    st.markdown("---")
+
+    # --- TABELA 2: REALIZADO (DENTRO DO PERÍODO) ---
+    st.markdown("### ✅ Realizado no Período")
+    
+    df_real = df_op[df_op['STATUS'].astype(str).str.upper().str.contains('REALIZADO', na=False)]
+    
+    if not df_real.empty:
+        # Cabeçalho de Totais para Realizados
+        r1, r2 = st.columns(2)
+        r1.metric("Total Realizado (L)", f"{df_real['LTS_NUM'].sum():,.0f}L".replace(',', '.'))
+        r2.metric("Total Realizado (R$)", f"R${df_real['VALOR_NUM'].sum():,.0f}".replace(',', '.'))
+
+        # Colunas: Empurrador | SC | Local | Entrega
+        st.dataframe(
+            df_real[[col_emp, 'SC', 'LOCAL', 'DT ENTREGA']],
+            use_container_width=True, hide_index=True,
+            column_config={
+                col_emp: st.column_config.TextColumn("Empurrador", width=150),
+                "SC": st.column_config.TextColumn("SC", width=80),
+                "LOCAL": st.column_config.TextColumn("Local", width=120),
+                "DT ENTREGA": st.column_config.TextColumn("Entrega", width=100)
+            }
+        )
+    else:
+        st.warning("Nenhuma carga realizada encontrada no período.")
 
 except Exception as e:
-    st.error(f"Erro: {e}")
+    st.error(f"Erro na leitura dos dados: {e}")
