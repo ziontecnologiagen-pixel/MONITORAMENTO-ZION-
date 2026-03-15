@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from urllib.parse import quote
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Dashboard Financeiro Limpo", layout="wide")
+st.set_page_config(page_title="Zion - Financeiro", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
@@ -16,6 +16,7 @@ def carregar_dados(aba):
 def formatar_moeda(valor):
     if not valor or valor == "0": return 0.0
     try:
+        # Conversão baseada na sua planilha
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
@@ -25,73 +26,67 @@ def formatar_moeda(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # Mapeamento: U(20)=Empurrador, V(21)=Previsto, X(23)=Contabil/Real
+    # Colunas: U(20)=Empurrador, V(21)=Previsto, X(23)=Real
     df_fin = pd.DataFrame()
     df_fin['EMPURRADOR'] = df_raw.iloc[:, 20]
     df_fin['PREVISTO'] = df_raw.iloc[:, 21].apply(formatar_moeda)
     df_fin['REAL'] = df_raw.iloc[:, 23].apply(formatar_moeda)
-    
-    # Cálculo Único: Diferença Real vs Previsto
     df_fin['DIFERENCA'] = df_fin['REAL'] - df_fin['PREVISTO']
     
     df_fin = df_fin[df_fin['EMPURRADOR'] != "E/M"].reset_index(drop=True)
 
-    st.title("📊 **RAIO X FINANCEIRO ZION**")
-
-    # --- GRÁFICO DE BARRAS ORGANIZADO ---
+    # --- GRÁFICO ---
     fig = go.Figure()
 
-    # Barra Previsto
+    # Barra Previsto (Orçado)
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['PREVISTO'],
-        name='PREVISTO',
-        marker=dict(color='rgba(135, 206, 235, 0.5)', line=dict(color='black', width=1)),
+        name='<b>ORÇADO</b>',
+        marker=dict(color='rgba(135, 206, 235, 0.6)', line=dict(color='black', width=1.5)),
         text=df_fin['PREVISTO'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
         textposition='outside',
-        textfont=dict(color='black')
+        textfont=dict(color='black', size=12)
     ))
 
-    # Barra Real
+    # Barra Real (Realizado)
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['REAL'],
-        name='REAL',
-        marker=dict(color='rgba(0, 102, 204, 0.8)', line=dict(color='black', width=1)),
+        name='<b>REALIZADO</b>',
+        marker=dict(color='rgba(0, 102, 204, 0.9)', line=dict(color='black', width=1.5)),
         text=df_fin['REAL'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
         textposition='outside',
-        textfont=dict(color='black')
+        textfont=dict(color='black', size=12)
     ))
 
-    # CORREÇÃO DA BAGUNÇA: Uma anotação por coluna
+    # Anotações de Saldo/Estouro (Apenas uma por empurrador para não encavalar)
     for i, row in df_fin.iterrows():
         if row['EMPURRADOR'] == "0": continue
         
-        # Decide se é Estouro (Vermelho) ou Saldo (Verde)
-        if row['DIFERENCA'] > 0:
-            msg = f"<b>ESTOURO:</b><br><b>R$ {row['DIFERENCA']:,.2f}</b>"
-            cor_label = "red"
-        else:
-            msg = f"<b>SALDO:</b><br><b>R$ {abs(row['DIFERENCA']):,.2f}</b>"
-            cor_label = "green"
-
+        cor_label = "red" if row['DIFERENCA'] > 0 else "green"
+        txt_label = "ESTOURO" if row['DIFERENCA'] > 0 else "SALDO"
+        
         fig.add_annotation(
-            x=row['EMPURRADOR'],
-            y=0,
-            text=msg,
-            showarrow=False,
-            yshift=-60, # Espaço para não encavalar no nome
-            font=dict(color=cor_label, size=12)
+            x=row['EMPURRADOR'], y=0,
+            text=f"<b>{txt_label}:</b><br><b>R$ {abs(row['DIFERENCA']):,.2f}</b>",
+            showarrow=False, yshift=-70,
+            font=dict(color=cor_label, size=13)
         )
 
-    # Ajustes finais de visibilidade (Letras Pretas e Negrito)
+    # AJUSTES DE TÍTULO E CORES PRETAS
     fig.update_layout(
+        title={
+            'text': "<b>REALIZADO VS ORÇADO</b>",
+            'y': 0.95, 'x': 0.5, 'xanchor': 'center', 'yanchor': 'top',
+            'font': {'size': 24, 'color': 'black', 'family': 'Arial Black'}
+        },
         template="plotly_white",
         barmode='group',
         height=700,
-        margin=dict(b=180, t=100),
+        margin=dict(b=200, t=120),
         xaxis=dict(
-            tickfont=dict(color='black', size=14, family="Arial Black"), # NOME EM PRETO E NEGRITO
+            tickfont=dict(color='black', size=14, family="Arial Black"),
             title=""
         ),
         yaxis=dict(
@@ -99,14 +94,16 @@ if not df_raw.empty:
             tickprefix="<b>R$ </b>",
             gridcolor='lightgrey'
         ),
-        legend=dict(font=dict(color='black', size=12, family="Arial Black")),
-        font=dict(color="black")
+        legend=dict(
+            font=dict(color='black', size=14, family="Arial Black"),
+            orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5
+        )
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Tabela consolidada com letras pretas e negrito
-    st.markdown("### **DETALHAMENTO CONSOLIDADO**")
+    # Tabela consolidada
+    st.markdown("### **TABELA DE CONFERÊNCIA: REALIZADO VS ORÇADO**")
     st.dataframe(
         df_fin[['EMPURRADOR', 'PREVISTO', 'REAL', 'DIFERENCA']].style.format({
             'PREVISTO': 'R$ {:,.2f}',
