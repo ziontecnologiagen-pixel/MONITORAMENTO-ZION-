@@ -5,7 +5,7 @@ import plotly.express as px
 from urllib.parse import quote
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Dashboard Definitivo", layout="wide")
+st.set_page_config(page_title="Zion - Dashboard Final", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
@@ -21,11 +21,11 @@ def limpar_valor(v):
         return float(v)
     except: return 0.0
 
-# --- PROCESSAMENTO ---
+# --- CARGA ---
 df_raw = carregar_dados_completos("ODM MARÇO")
 
 if not df_raw.empty:
-    # Dados Empurrador (U, V, W, X, Z)
+    # 1. Dados Empurrador (U, V, W, X, Z)
     df_emp = pd.DataFrame()
     df_emp['NOME'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df_emp['ORC_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -36,66 +36,55 @@ if not df_raw.empty:
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df_emp = df_emp[df_emp['NOME'].isin(frota)].reset_index(drop=True)
 
-    # Dados Ciclo (Tabela Mestre AF2:AJ3)
+    # 2. Dados Ciclo (Intervalo AF2:AJ3)
     df_ciclo = df_raw.iloc[1:3, 31:36].copy() 
     df_ciclo.columns = ['CICLO', 'ORC_RS', 'REAL_RS', 'FORE_L', 'REAL_L']
     for c in ['ORC_RS', 'REAL_RS', 'FORE_L', 'REAL_L']:
         df_ciclo[c] = df_ciclo[c].apply(limpar_valor)
 
-    st.markdown("<h1 style='text-align: center; color: black;'><b>PAINEL CONSOLIDADO ZION</b></h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION</b></h1>", unsafe_allow_html=True)
 
-    # --- PARTE 1: GRÁFICOS DE BARRAS POR EMPURRADOR (OS QUE VOCÊ GOSTOU) ---
-    st.markdown("## **1. PERFORMANCE POR EMPURRADOR (FROTA ATIVA)**")
+    # --- SEÇÃO APROVADA: PERFORMANCE POR EMPURRADOR (LADO A LADO) ---
+    st.markdown("### **VISUALIZAÇÃO POR EMPURRADOR (R$ E LITROS)**")
     col1, col2 = st.columns(2)
     
     with col1:
+        # Financeiro
         fig1 = go.Figure()
-        fig1.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['ORC_RS'], name='<b>ORÇADO</b>', marker_color='lightblue'))
-        fig1.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['REAL_RS'], name='<b>REALIZADO</b>', marker_color='blue'))
+        fig1.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['ORC_RS'], name='ORÇADO', marker_color='lightblue'))
+        fig1.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['REAL_RS'], name='REALIZADO', marker_color='blue'))
         for i, r in df_emp.iterrows():
             diff = r['REAL_RS'] - r['ORC_RS']
             cor = "red" if diff > 0 else "green"
-            fig1.add_annotation(x=r['NOME'], y=0, text=f"<b>R$ {abs(diff):,.0f}</b>", showarrow=False, yshift=-60, font=dict(color=cor, size=12))
-        fig1.update_layout(title="<b>FINANCEIRO (R$)</b>", barmode='group', font=dict(color="black", family="Arial Black"))
+            lbl = "ESTOURO" if diff > 0 else "SALDO"
+            fig1.add_annotation(x=r['NOME'], y=0, text=f"<b>{lbl}:</b><br><b>R$ {abs(diff):,.0f}</b>", showarrow=False, yshift=-75, font=dict(color=cor, size=11))
+        fig1.update_layout(title="<b>FINANCEIRO (R$)</b>", barmode='group', font=dict(color="black", family="Arial Black"), margin=dict(b=150))
         st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
+        # Consumo
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['FORE_L'], name='<b>ORÇADO</b>', marker_color='lightblue'))
-        fig2.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['REAL_L'], name='<b>REALIZADO</b>', marker_color='blue'))
-        fig2.update_layout(title="<b>CONSUMO (LITROS)</b>", barmode='group', font=dict(color="black", family="Arial Black"))
+        fig2.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['FORE_L'], name='ORÇADO', marker_color='lightblue'))
+        fig2.add_trace(go.Bar(x=df_emp['NOME'], y=df_emp['REAL_L'], name='REALIZADO', marker_color='blue'))
+        fig2.update_layout(title="<b>CONSUMO (LITROS)</b>", barmode='group', font=dict(color="black", family="Arial Black"), margin=dict(b=150))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- PARTE 2: GRÁFICOS DE BARRAS POR CICLO (DADOS MESTRE AF:AJ) ---
+    # --- NOVA SEÇÃO: VISUALIZAÇÃO POR CICLO (BARRAS E PIZZA) ---
     st.divider()
-    st.markdown("## **2. PERFORMANCE POR CICLO (TABELA MESTRE)**")
+    st.markdown("### **RESUMO POR CICLO (TABELA MESTRE AF:AJ)**")
     col3, col4 = st.columns(2)
 
     with col3:
+        # Barras por Ciclo
         fig3 = go.Figure()
-        fig3.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['ORC_RS'], name='<b>ORÇADO</b>', marker_color='lightgray'))
-        fig3.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['REAL_RS'], name='<b>REALIZADO</b>', marker_color='darkblue'))
-        fig3.update_layout(title="<b>CICLOS: FINANCEIRO (R$)</b>", barmode='group', font=dict(color="black", family="Arial Black"))
+        fig3.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['ORC_RS'], name='ORÇADO', marker_color='lightgray'))
+        fig3.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['REAL_RS'], name='REALIZADO', marker_color='darkblue'))
+        fig3.update_layout(title="<b>CICLOS: COMPARATIVO FINANCEIRO</b>", barmode='group', font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig3, use_container_width=True)
 
     with col4:
-        fig4 = go.Figure()
-        fig4.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['FORE_L'], name='<b>FORECAST</b>', marker_color='lightgray'))
-        fig4.add_trace(go.Bar(x=df_ciclo['CICLO'], y=df_ciclo['REAL_L'], name='<b>REAL</b>', marker_color='darkblue'))
-        fig4.update_layout(title="<b>CICLOS: CONSUMO (LITROS)</b>", barmode='group', font=dict(color="black", family="Arial Black"))
+        # Pizza por Ciclo
+        fig4 = px.pie(df_ciclo, values='REAL_L', names='CICLO', title='<b>PARTICIPAÇÃO NO CONSUMO (LITROS)</b>')
+        fig4.update_traces(textfont_color="black", textinfo='percent+label', marker=dict(line=dict(color='black', width=1)))
+        fig4.update_layout(font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig4, use_container_width=True)
-
-    # --- PARTE 3: GRÁFICOS DE PIZZA (DISTRIBUIÇÃO) ---
-    st.divider()
-    st.markdown("## **3. DISTRIBUIÇÃO PERCENTUAL POR CICLO**")
-    col5, col6 = st.columns(2)
-
-    with col5:
-        fig5 = px.pie(df_ciclo, values='REAL_RS', names='CICLO', title='<b>PARTICIPAÇÃO NO GASTO (R$)</b>')
-        fig5.update_traces(textinfo='percent+label', marker=dict(line=dict(color='black', width=1)))
-        st.plotly_chart(fig5, use_container_width=True)
-
-    with col6:
-        fig6 = px.pie(df_ciclo, values='REAL_L', names='CICLO', title='<b>PARTICIPAÇÃO NO VOLUME (L)</b>')
-        fig6.update_traces(textinfo='percent+label', marker=dict(line=dict(color='black', width=1)))
-        st.plotly_chart(fig6, use_container_width=True)
