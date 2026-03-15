@@ -29,7 +29,7 @@ def renderizar_rancho(df):
     col_status = df.columns[1]   
     col_sc = df.columns[6]       
     col_emp = df.columns[10]     
-    col_entrega = df.columns[17] 
+    col_entrega = df.columns[14] 
     col_local = df.columns[19]   
 
     # Criar cópia para filtrar
