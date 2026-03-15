@@ -4,66 +4,91 @@ import plotly.express as px
 from urllib.parse import quote
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Raio X Financeiro", layout="wide")
+st.set_page_config(page_title="Zion - Dashboard Financeiro ODM", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
 @st.cache_data(ttl=2)
 def carregar_dados(aba):
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(aba)}"
-    return pd.read_csv(url, dtype=str).fillna("")
+    return pd.read_csv(url, dtype=str).fillna("0")
 
-def limpar_valor(valor):
-    """Converte strings de moeda (ex: R$ 1.200,50) em números para o gráfico"""
-    if not valor: return 0.0
+def limpar_financeiro(valor):
+    """Converte 'R$ 510.300,00' ou '90000' em float puro"""
+    if not valor or valor == "0": return 0.0
     try:
-        # Remove símbolos e ajusta separadores decimais
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
         return 0.0
 
-# --- CARREGAMENTO ---
-df_odm_raw = carregar_dados("ODM MARÇO")
+# --- PROCESSAMENTO DOS DADOS (BASEADO NA IMAGEM image_0fc5da) ---
+df_raw = carregar_dados("ODM MARÇO")
 
-# --- PROCESSAMENTO FINANCEIRO ---
-st.title("💰 Raio X Financeiro - Combustível (ODM)")
-
-if not df_odm_raw.empty:
-    # 1. Identificar colunas: Nome do Empurrador (Índice 1) e Valor Total (Ajustar Índice conforme sua planilha)
-    # Supondo que o Valor Total esteja na Coluna G (Índice 6) ou similar no ODM
-    df_financeiro = df_odm_raw.copy()
+if not df_raw.empty:
+    # Mapeamento exato conforme a imagem enviada:
+    # Coluna U (20): E/M (Empurrador)
+    # Coluna V (21): PREVISTO
+    # Coluna Z (25): ODM / REAL (Gasto real de ODM)
+    # Coluna AD (29): CONTÁBIL (Gasto total acumulado)
     
-    # IMPORTANTE: Altere o número '6' abaixo para o índice da coluna que tem o VALOR em R$ no seu ODM
-    df_financeiro['VALOR_NUM'] = df_financeiro.iloc[:, 6].apply(limpar_valor) 
+    df_fin = pd.DataFrame()
+    df_fin['EMPURRADOR'] = df_raw.iloc[:, 20]
+    df_fin['PREVISTO'] = df_raw.iloc[:, 21].apply(limpar_financeiro)
+    df_fin['ODM_REAL'] = df_raw.iloc[:, 25].apply(limpar_financeiro)
+    df_fin['CONTABIL'] = df_raw.iloc[:, 29].apply(limpar_financeiro)
     
-    # Agrupa gastos por empurrador
-    gastos_por_empurrador = df_financeiro.groupby(df_financeiro.iloc[:, 1])['VALOR_NUM'].sum().reset_index()
-    gastos_por_empurrador.columns = ['EMPURRADOR', 'TOTAL_GASTO']
-    gastos_por_empurrador = gastos_por_empurrador.sort_values(by='TOTAL_GASTO', ascending=False)
+    # Filtra linhas vazias ou cabeçalhos
+    df_fin = df_fin[df_fin['EMPURRADOR'] != "E/M"].reset_index(drop=True)
 
-    # --- EXIBIÇÃO DO GRÁFICO FINANCEIRO ---
-    fig_custo = px.bar(
-        gastos_por_empurrador, 
-        x='EMPURRADOR', 
-        y='TOTAL_GASTO',
-        title="Total Gasto com ODM por Empurrador (R$)",
-        text_auto='.2s',
-        color='TOTAL_GASTO',
-        color_continuous_scale='Reds'
+    # --- DASHBOARD ---
+    st.title("📊 Raio X Financeiro - Aquisição ODM")
+    
+    # 1. MÉTRICAS GERAIS (Cards)
+    c1, c2, c3 = st.columns(3)
+    total_odm = df_fin['ODM_REAL'].sum()
+    c1.metric("Total Gasto ODM (Real)", f"R$ {total_odm:,.2f}")
+    c2.metric("Total Contábil Acumulado", f"R$ {df_fin['CONTABIL'].sum():,.2f}")
+    c3.metric("Maior Consumo (ODM)", df_fin.loc[df_fin['ODM_REAL'].idxmax(), 'EMPURRADOR'])
+
+    st.divider()
+
+    # 2. GRÁFICO DE BARRAS: ODM REAL POR EMPURRADOR
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        fig_bar = px.bar(
+            df_fin.sort_values('ODM_REAL', ascending=False),
+            x='EMPURRADOR',
+            y='ODM_REAL',
+            title="Gasto Real de ODM por Empurrador (Coluna Z)",
+            text_auto='.2s',
+            color='ODM_REAL',
+            color_continuous_scale='Blues'
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_b:
+        # GRÁFICO DE COMPARAÇÃO: PREVISTO VS REAL
+        fig_comp = px.bar(
+            df_fin, 
+            x='EMPURRADOR', 
+            y=['PREVISTO', 'ODM_REAL'],
+            title="Comparativo: Previsto (V) vs Real (Z)",
+            barmode='group'
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+    st.divider()
+
+    # 3. TABELA DE CONFERÊNCIA (ESTILO PLANILHA)
+    st.markdown("### 📋 Resumo Financeiro Detalhado")
+    st.dataframe(
+        df_fin.style.format({
+            'PREVISTO': 'R$ {:,.2f}',
+            'ODM_REAL': 'R$ {:,.2f}',
+            'CONTABIL': 'R$ {:,.2f}'
+        }),
+        use_container_width=True,
+        hide_index=True
     )
-    fig_custo.update_traces(texttemplate='R$ %{y:.2f}', textposition='outside')
-    st.plotly_chart(fig_custo, use_container_width=True)
-
-    # --- MÉTRICAS RÁPIDAS (Cards) ---
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Gasto Total Frota", f"R$ {gastos_por_empurrador['TOTAL_GASTO'].sum():,.2f}")
-    col2.metric("Maior Consumidor", gastos_por_empurrador.iloc[0]['EMPURRADOR'])
-    col3.metric("Média por Empurrador", f"R$ {gastos_por_empurrador['TOTAL_GASTO'].mean():,.2f}")
-
-st.divider()
-
-# --- TABELAS DETALHADAS LOGO ABAIXO ---
-st.markdown("### ⛽ Detalhamento de Lançamentos (ODM)")
-if not df_odm_raw.empty:
-    st.dataframe(df_odm_raw, use_container_width=True, hide_index=True)
