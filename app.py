@@ -14,20 +14,19 @@ def carregar_dados(nome_aba):
 
 def renderizar_rancho(df):
     try:
-        # MAPEAMENTO DE COLUNAS (Índices exatos conforme o vídeo)
+        # MAPEAMENTO DE COLUNAS BASEADO NAS IMAGENS
         col_prox_ped = df.columns[0]   # A - PROXIMO PEDIDO
         col_status   = df.columns[1]   # B - STATUS
         col_sc       = df.columns[6]   # G - SC
         col_emp      = df.columns[10]  # K - EMPURRADOR
-        col_comp     = df.columns[11]  # L - COMPETÊNCIA
+        col_comp     = df.columns[11]  # L - COMPETÊNCIA (Valor: "03")
         col_entrega  = df.columns[13]  # N - ENTREGA
         col_prox     = df.columns[15]  # P - PROXIMO
         col_desc     = df.columns[18]  # S - DESCRIÇÃO
 
         hoje = pd.to_datetime("2026-03-15")
-        mes_ref = "03/2026" # Texto padrão da coluna L para o mês atual
-
-        # --- TABELA 1: RANCHOS PROGRAMADOS (Conserva a lógica anterior) ---
+        
+        # --- TABELA 1: RANCHOS PROGRAMADOS ---
         df_prog = df[df[col_status].astype(str).str.upper().str.contains('PROGR', na=False)].copy()
         df_prog['DT_OBJ'] = pd.to_datetime(df_prog[col_entrega], dayfirst=True, errors='coerce')
         df_futuro = df_prog[df_prog['DT_OBJ'] >= hoje].sort_values(by='DT_OBJ')
@@ -44,41 +43,39 @@ def renderizar_rancho(df):
         st.divider()
 
         # --- TABELA 2: RANCHO ENTREGUES NO MÊS CORRENTE ---
-        # Filtro: Status B="REALIZADO" e Período L="03/2026"
-        df_real = df[df[col_status].astype(str).str.upper().str.contains('REALI', na=False)].copy()
-        
-        # Filtro robusto para a Competência (Coluna L)
-        df_entregues_mes = df_real[df_real[col_comp].astype(str).str.contains('03/2026', na=False)].copy()
+        # Lógica corrigida: Status "REALIZADO" e Competência "03"
+        df_real = df[
+            (df[col_status].astype(str).str.upper() == 'REALIZADO') & 
+            (df[col_comp].astype(str).str.contains('03', na=False))
+        ].copy()
 
-        st.markdown(f"### ✅ Rancho Entregues no Mês Corrente ({mes_ref})")
+        st.markdown("### ✅ Rancho Entregues no Mês Corrente")
         
-        if not df_entregues_mes.empty:
-            # Colunas: K, G, N, P, S, A
+        if not df_real.empty:
+            # Colunas solicitadas: K, G, N, P, S, A
             st.dataframe(
-                df_entregues_mes[[col_emp, col_sc, col_entrega, col_prox, col_desc, col_prox_ped]],
+                df_real[[col_emp, col_sc, col_entrega, col_prox, col_desc, col_prox_ped]],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     col_emp: "EMPURRADOR",
                     col_sc: "SC",
                     col_entrega: "ENTREGA",
-                    col_prox: "PRÓXIMO",
+                    col_prox: "PROXIMO",
                     col_desc: "DESCRIÇÃO",
-                    col_prox_ped: "PRÓXIMO PEDIDO"
+                    col_prox_ped: "PROXIMO PEDIDO"
                 }
             )
         else:
-            st.warning(f"Nenhum rancho 'REALIZADO' encontrado para o período {mes_ref} na coluna L.")
+            st.warning("Nenhum rancho 'REALIZADO' encontrado com competência '03' na coluna L.")
 
     except Exception as e:
         st.error(f"Erro ao processar tabelas: {e}")
 
-# --- INTERFACE PRINCIPAL ---
+# --- EXECUÇÃO ---
 st.title("🚢 Sistema de Gestão Zion")
 aba = st.radio("Selecione:", ["Combustível (ODM)", "Rancho"], horizontal=True)
 
 if aba == "Rancho":
     df_rancho = carregar_dados("RANCHO")
     renderizar_rancho(df_rancho)
-else:
-    st.info("Módulo de Combustível selecionado.")
