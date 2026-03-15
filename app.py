@@ -2,55 +2,74 @@ import streamlit as st
 import pandas as pd
 from urllib.parse import quote
 
-st.set_page_config(page_title="Zion - Raio X Real", layout="wide")
+# --- CONFIGURAÇÃO ---
+st.set_page_config(page_title="Zion - Gestão Unificada", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
 @st.cache_data(ttl=2)
-def carregar(aba):
+def carregar_dados(aba):
+    """Carrega os dados como string para não sumir com os zeros da SC"""
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(aba)}"
     return pd.read_csv(url, dtype=str).fillna("")
 
-def montar_raio_x():
-    df_r = carregar("RANCHO")
-    df_o = carregar("ODM MARÇO")
-    
-    # Criamos a base com todos os empurradores únicos das duas tabelas
-    empurradores_r = df_r.iloc[:, 10].unique() # Coluna K
-    empurradores_o = df_o.iloc[:, 1].unique()  # Coluna B
-    todos_empurradores = sorted(list(set(empurradores_r) | set(empurradores_o)))
-    
-    resumo = []
-    
-    for emp in todos_empurradores:
-        if not emp or emp == "nan" or emp == "EMPURRADOR": continue
-        
-        # BUSCA NO RANCHO (Tudo que está como PROGRAMADO)
-        dados_r = df_r[(df_r.iloc[:, 10] == emp) & (df_r.iloc[:, 1].str.contains("PROGR", na=False))]
-        txt_rancho = ""
-        if not dados_r.empty:
-            # Pega Data(13) e SC(6)
-            txt_rancho = " | ".join([f"{r.iloc[13]} (SC {r.iloc[6]})" for _, r in dados_r.iterrows()])
-            
-        # BUSCA NO ODM (Pega o que estiver lançado para o futuro ou pendente)
-        dados_o = df_o[df_o.iloc[:, 1] == emp]
-        txt_odm = ""
-        if not dados_o.empty:
-            # Pega Data(0) e Documento(2)
-            txt_odm = " | ".join([f"{o.iloc[0]} (Doc {o.iloc[2]})" for _, o in dados_o.iterrows()])
-            
-        resumo.append({
-            "EMPURRADOR": emp,
-            "PENDÊNCIAS RANCHO": txt_rancho,
-            "PENDÊNCIAS ODM": txt_odm
-        })
-        
-    return pd.DataFrame(resumo)
+def definir_semaforo(descricao):
+    """Lógica visual conforme as imagens"""
+    desc = str(descricao).upper()
+    if "1 E MEIO" in desc or "1 RANCHO E MEIO" in desc:
+        return "🔴"
+    elif "MEIO RANCHO" in desc:
+        return "🟡"
+    return "🟢"
 
-st.title("🚢 Raio X Unificado - Zion")
-df_final = montar_raio_x()
+# --- INTERFACE PRINCIPAL ---
+st.title("🚢 Sistema de Gestão Unificado Zion")
 
-if not df_final.empty:
-    st.dataframe(df_final, use_container_width=True, hide_index=True)
-else:
-    st.warning("Nenhum dado encontrado para processar.")
+# 1. BLOCO DE RANCHOS PROGRAMADOS
+st.markdown("### 📅 RANCHOS PROGRAMADOS")
+df_rancho = carregar_dados("RANCHO")
+
+if not df_rancho.empty:
+    # Filtro: Status (Índice 1) contém PROGRAMADO
+    df_prog = df_rancho[df_rancho.iloc[:, 1].astype(str).str.upper().str.contains('PROGR', na=False)].copy()
+    
+    # Colunas conforme imagem: Empurrador(10), SC(6), Data Entrega(13), Descrição(18)
+    t1 = df_prog.iloc[:, [10, 6, 13, 18]].copy()
+    t1.columns = ["EMPURRADOR", "SC", "DATA ENTREGA", "DESCRIÇÃO"]
+    
+    # Forçar SC a aparecer como texto
+    t1["SC"] = t1["SC"].astype(str)
+    
+    st.dataframe(t1, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# 2. BLOCO DE RANCHO ENTREGUES (REALIZADOS)
+st.markdown("### ✅ Rancho Entregues no Mês Corrente")
+# Filtro: Status(1) == REALIZADO e Competência(11) == 03
+df_real = df_rancho[
+    (df_rancho.iloc[:, 1].astype(str).str.upper() == 'REALIZADO') & 
+    (df_rancho.iloc[:, 11].astype(str).str.contains('03', na=False))
+].copy()
+
+if not df_real.empty:
+    # Colunas: K(10), G(6), J(9), N(13), P(15), S(18), A(0)
+    t2 = df_real.iloc[:, [10, 6, 9, 13, 15, 18, 0]].copy()
+    t2.columns = ["EMPURRADOR", "SC", "SETOR/LOCAL", "ENTREGA", "PRÓXIMO", "DESCRIÇÃO", "PRÓXIMO PEDIDO"]
+    
+    # Adiciona Semáforo conforme solicitado
+    t2.insert(0, "SEMÁFORO", t2["DESCRIÇÃO"].apply(definir_semaforo))
+    
+    # GARANTIA: SC como texto puro
+    t2["SC"] = t2["SC"].astype(str)
+    
+    st.dataframe(t2, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# 3. BLOCO DE COMBUSTÍVEL (ODM)
+st.markdown("### ⛽ Gestão de Combustível (ODM)")
+df_odm = carregar_dados("ODM MARÇO")
+if not df_odm.empty:
+    # Mostra a tabela de ODM na mesma tela
+    st.dataframe(df_odm, use_container_width=True, hide_index=True)
