@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from urllib.parse import quote
 
-# --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Dashboard Financeiro", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Zion - Dashboard Premium", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
@@ -14,78 +14,76 @@ def carregar_dados(aba):
     return pd.read_csv(url, dtype=str).fillna("0")
 
 def formatar_moeda(valor):
-    """Converte strings financeiras da planilha para float"""
     if not valor or valor == "0": return 0.0
     try:
-        # Remove R$, pontos de milhar e troca vírgula por ponto
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
         return 0.0
 
-# --- PROCESSAMENTO ---
+# --- PROCESSAMENTO DOS DADOS ---
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # MAPEAMENTO DIRETO PELAS COLUNAS DA IMAGEM
-    # U = Índice 20 (Empurrador)
-    # V = Índice 21 (Previsto)
-    # X = Índice 23 (Contabil/Real)
-    
+    # Mapeamento conforme image_0fc5da: U(20), V(21), X(23)
     df_fin = pd.DataFrame()
     df_fin['EMPURRADOR'] = df_raw.iloc[:, 20]
     df_fin['PREVISTO'] = df_raw.iloc[:, 21].apply(formatar_moeda)
     df_fin['REAL'] = df_raw.iloc[:, 23].apply(formatar_moeda)
-    
-    # Limpa cabeçalhos e linhas vazias
     df_fin = df_fin[df_fin['EMPURRADOR'] != "E/M"].reset_index(drop=True)
 
-    # --- TELA DO DASHBOARD ---
-    st.title("📊 Comparativo Financeiro: Previsto vs Real")
-    st.subheader("Análise de Orçamento de Compra ODM por Empurrador")
+    st.title("🚢 Zion Premium - Raio X de Performance Financeira")
+    st.markdown("### Comparativo de Aquisição ODM (Previsto vs Real)")
 
-    # CRIANDO O GRÁFICO DE BARRAS CRUZADO
+    # --- CRIAÇÃO DO GRÁFICO ELEGANTE ---
     fig = go.Figure()
 
-    # Barra do Previsto (V)
+    # Barra Previsto (Efeito Metalizado Cinza/Platina)
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['PREVISTO'],
-        name='Orçado (Previsto)',
-        marker_color='#1f77b4',
-        text=df_fin['PREVISTO'].apply(lambda x: f'R$ {x:,.2f}'),
+        name='Orcado (V)',
+        marker=dict(
+            color='rgba(192, 192, 192, 0.6)', # Prata vazado
+            line=dict(color='rgb(192, 192, 192)', width=2) # Contorno sólido
+        ),
+        text=df_fin['PREVISTO'].apply(lambda x: f'R$ {x:,.0f}'),
         textposition='outside'
     ))
 
-    # Barra do Real (X)
+    # Barra Real (Efeito Metalizado Ouro/Bronze)
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['REAL'],
-        name='Gasto Real (Contábil)',
-        marker_color='#d62728',
-        text=df_fin['REAL'].apply(lambda x: f'R$ {x:,.2f}'),
+        name='Gasto Real (X)',
+        marker=dict(
+            color='rgba(212, 175, 55, 0.6)', # Ouro vazado
+            line=dict(color='rgb(212, 175, 55)', width=2) # Contorno sólido
+        ),
+        text=df_fin['REAL'].apply(lambda x: f'R$ {x:,.0f}'),
         textposition='outside'
     ))
 
+    # Estilização do Layout
     fig.update_layout(
+        template="plotly_dark", # Fundo escuro para destacar o "metal"
         barmode='group',
-        xaxis_title="Empurrador",
-        yaxis_title="Valores em R$",
-        legend_title="Legenda",
-        height=600,
-        yaxis=dict(tickprefix="R$ ")
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family="Arial, sans-serif", size=14, color="white"),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickprefix="R$ "),
+        xaxis=dict(showgrid=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=100)
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- TABELA DE APOIO ---
+    # --- TABELA DE APOIO ESTILIZADA ---
     st.divider()
-    st.markdown("### 📝 Dados Consolidados")
+    st.markdown("#### Detalhamento de Custos por Empurrador")
     st.dataframe(
         df_fin.style.format({'PREVISTO': 'R$ {:,.2f}', 'REAL': 'R$ {:,.2f}'}),
         use_container_width=True,
         hide_index=True
     )
-
-else:
-    st.error("Não foi possível carregar os dados da aba ODM MARÇO.")
