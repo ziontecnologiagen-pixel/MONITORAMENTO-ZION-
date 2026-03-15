@@ -26,7 +26,7 @@ def carregar_dados(nome_aba):
 
 def renderizar_rancho(df):
     # Mapeamento por posição (B=1, G=6, K=10, R=17, T=19)
-    col_status = df.columns[1]   
+    col_status = df.columns[2]   
     col_sc = df.columns[6]       
     col_emp = df.columns[10]     
     col_entrega = df.columns[14] 
