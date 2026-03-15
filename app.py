@@ -1,81 +1,79 @@
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
+from datetime import datetime
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Raio X Empurrador", layout="wide")
+st.set_page_config(page_title="Zion - Cronograma Futuro", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
 @st.cache_data(ttl=2)
 def carregar_dados(nome_aba):
-    """Lê os dados brutos como string para garantir que a SC (Índice 6) apareça"""
+    """Lê os dados brutos como string para preservar SCs e datas"""
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(nome_aba)}"
     return pd.read_csv(url, dtype=str).fillna("")
 
-def processar_programacao_unificada():
-    # 1. Carrega as duas frentes de dados
+def processar_pendencias_unificadas():
     df_rancho = carregar_dados("RANCHO")
     df_odm = carregar_dados("ODM MARÇO")
     
-    hoje = pd.to_datetime("2026-03-15")
-    lista_programacao = []
+    # Data de referência: 15/03/2026
+    hoje = pd.to_datetime("2026-03-15", dayfirst=True)
+    lista_pendente = []
 
-    # --- VARREDURA RANCHO (Programados) ---
+    # --- VARREDURA RANCHO (PENDENTES) ---
     if not df_rancho.empty:
-        # Filtro: Status (Índice 1) contém "PROGR"
-        # Colunas: Empurrador(10), SC(6), Entrega(13)
-        df_p = df_rancho[df_rancho.iloc[:, 1].astype(str).str.upper().str.contains('PROGR', na=False)].copy()
-        for _, row in df_p.iterrows():
-            lista_programacao.append({
+        # Colunas: Empurrador(10), SC(6), Entrega(13), Status(1)
+        df_r = df_rancho.copy()
+        df_r['DT_AUX'] = pd.to_datetime(df_r.iloc[:, 13], dayfirst=True, errors='coerce')
+        
+        # Filtra Status Programado OU qualquer entrega futura (>= hoje)
+        pendentes_r = df_r[df_r['DT_AUX'] >= hoje].sort_values(by='DT_AUX')
+        
+        for _, row in pendentes_r.iterrows():
+            lista_pendente.append({
                 "EMPURRADOR": row.iloc[10],
                 "TIPO": "🍎 RANCHO",
-                "SC / DOC": row.iloc[6], # Coluna G
-                "DATA PROGRAMADA": row.iloc[13],
-                "STATUS": "AGUARDANDO"
+                "SC / DOCUMENTO": row.iloc[6], # Coluna G
+                "DATA PREVISTA": row.iloc[13],
+                "DESCRIÇÃO": row.iloc[18] if len(row) > 18 else "N/A"
             })
 
-    # --- VARREDURA ODM (Programados/Pendentes) ---
+    # --- VARREDURA ODM (PENDENTES) ---
     if not df_odm.empty:
-        # Supondo que no ODM a coluna de Empurrador e Data existam (ajustado pelos índices do seu vídeo)
-        # Se o ODM não tiver status "Programado", pegamos os dados gerais de agendamento
-        for _, row in df_odm.iterrows():
-            # Exemplo baseado na estrutura padrão de ODM que você usa
-            if row.iloc[0] != "": # Verifica se a linha não está vazia
-                lista_programacao.append({
-                    "EMPURRADOR": row.iloc[1], # Ajuste conforme a coluna de empurrador no seu ODM
-                    "TIPO": "⛽ COMBUSTÍVEL",
-                    "SC / DOC": "ODM", 
-                    "DATA PROGRAMADA": row.iloc[0], # Ajuste conforme a coluna de data
-                    "STATUS": "PROGRAMADO"
-                })
+        # Assume-se que a Coluna 0 é Data e Coluna 1 é Empurrador no seu ODM
+        df_o = df_odm.copy()
+        df_o['DT_AUX'] = pd.to_datetime(df_o.iloc[:, 0], dayfirst=True, errors='coerce')
+        
+        pendentes_o = df_o[df_o['DT_AUX'] >= hoje].sort_values(by='DT_AUX')
+        
+        for _, row in pendentes_o.iterrows():
+            lista_pendente.append({
+                "EMPURRADOR": row.iloc[1],
+                "TIPO": "⛽ COMBUSTÍVEL (ODM)",
+                "SC / DOCUMENTO": row.iloc[2] if len(row) > 2 else "ODM-PEND", # Puxa SC se houver
+                "DATA PREVISTA": row.iloc[0],
+                "DESCRIÇÃO": "Abastecimento Programado"
+            })
 
-    return pd.DataFrame(lista_programacao)
+    return pd.DataFrame(lista_pendente)
 
-# --- INTERFACE ---
-st.title("🚢 Raio X do Empurrador - Zion")
-st.subheader("1ª Tela: Cronograma Unificado (Rancho + ODM)")
+# --- INTERFACE DIRETA ---
+st.title("🚢 Cronograma Unificado Zion")
+st.subheader("Pendências de Hoje (15/03) para o Futuro")
 
-df_final = processar_programacao_unificada()
+df_futuro = processar_pendencias_unificadas()
 
-if not df_final.empty:
-    # Filtro por Empurrador para o Raio X
-    empurradores = sorted(df_final["EMPURRADOR"].unique())
-    selecionado = st.selectbox("Selecione o Empurrador para ver a agenda:", ["TODOS"] + empurradores)
-
-    if selecionado != "TODOS":
-        df_exibir = df_final[df_final["EMPURRADOR"] == selecionado]
-    else:
-        df_exibir = df_final
-
-    # Exibição da Tabela Unificada
+if not df_futuro.empty:
+    # Exibe tudo em uma única tabela sem necessidade de filtros
     st.dataframe(
-        df_exibir.sort_values(by="DATA PROGRAMADA"),
+        df_futuro.sort_values(by="DATA PREVISTA"),
         use_container_width=True,
         hide_index=True
     )
 else:
-    st.info("Nenhuma programação futura encontrada nas tabelas.")
+    st.info("Não existem entregas de Rancho ou ODM programadas de hoje em diante.")
 
 st.divider()
-st.write("**Próximo passo:** Deseja que eu puxe agora os **gastos totais** (valores) de cada um para fechar o Raio X?")
+st.info("💡 Esta tela mostra tudo que está 'na agulha' para acontecer, unindo Rancho e Combustível.")
