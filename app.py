@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from urllib.parse import quote
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Financeiro", layout="wide")
+st.set_page_config(page_title="Zion - Dashboard Financeiro", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
@@ -16,7 +16,7 @@ def carregar_dados(aba):
 def formatar_moeda(valor):
     if not valor or valor == "0": return 0.0
     try:
-        # Conversão baseada na sua planilha
+        # Conversão baseada na planilha
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
@@ -26,55 +26,56 @@ def formatar_moeda(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # Colunas: U(20)=Empurrador, V(21)=Previsto, X(23)=Real
+    # Mapeamento: U(20)=Empurrador, V(21)=Previsto, X(23)=Real
     df_fin = pd.DataFrame()
     df_fin['EMPURRADOR'] = df_raw.iloc[:, 20]
     df_fin['PREVISTO'] = df_raw.iloc[:, 21].apply(formatar_moeda)
     df_fin['REAL'] = df_raw.iloc[:, 23].apply(formatar_moeda)
     df_fin['DIFERENCA'] = df_fin['REAL'] - df_fin['PREVISTO']
     
-    df_fin = df_fin[df_fin['EMPURRADOR'] != "E/M"].reset_index(drop=True)
+    # --- FILTRO SOLICITADO ---
+    # Remove linhas onde o nome do empurrador é "E/M", "0", "vazio" ou não é um nome válido
+    lista_validos = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
+    df_fin = df_fin[df_fin['EMPURRADOR'].str.upper().isin(lista_validos)].reset_index(drop=True)
 
-    # --- GRÁFICO ---
+    # --- GRÁFICO REALIZADO VS ORÇADO ---
     fig = go.Figure()
 
-    # Barra Previsto (Orçado)
+    # Barra Orçado
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['PREVISTO'],
         name='<b>ORÇADO</b>',
-        marker=dict(color='rgba(135, 206, 235, 0.6)', line=dict(color='black', width=1.5)),
+        marker=dict(color='rgba(135, 206, 235, 0.6)', line=dict(color='black', width=2)),
         text=df_fin['PREVISTO'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
         textposition='outside',
         textfont=dict(color='black', size=12)
     ))
 
-    # Barra Real (Realizado)
+    # Barra Realizado
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['REAL'],
         name='<b>REALIZADO</b>',
-        marker=dict(color='rgba(0, 102, 204, 0.9)', line=dict(color='black', width=1.5)),
+        marker=dict(color='rgba(0, 102, 204, 0.9)', line=dict(color='black', width=2)),
         text=df_fin['REAL'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
         textposition='outside',
         textfont=dict(color='black', size=12)
     ))
 
-    # Anotações de Saldo/Estouro (Apenas uma por empurrador para não encavalar)
+    # Anotações de Saldo/Estouro (Letras Pretas e Negrito)
     for i, row in df_fin.iterrows():
-        if row['EMPURRADOR'] == "0": continue
-        
         cor_label = "red" if row['DIFERENCA'] > 0 else "green"
         txt_label = "ESTOURO" if row['DIFERENCA'] > 0 else "SALDO"
         
         fig.add_annotation(
             x=row['EMPURRADOR'], y=0,
             text=f"<b>{txt_label}:</b><br><b>R$ {abs(row['DIFERENCA']):,.2f}</b>",
-            showarrow=False, yshift=-70,
+            showarrow=False, yshift=-75,
             font=dict(color=cor_label, size=13)
         )
 
-    # AJUSTES DE TÍTULO E CORES PRETAS
+    # AJUSTES DE TÍTULO E LAYOUT
     fig.update_layout(
         title={
             'text': "<b>REALIZADO VS ORÇADO</b>",
