@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from urllib.parse import quote
 
-# --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Zion - Dashboard de Estouro", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Zion - Dashboard de Estouro High-Contrast", layout="wide")
 
 SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 
@@ -16,92 +16,90 @@ def carregar_dados(aba):
 def formatar_moeda(valor):
     if not valor or valor == "0": return 0.0
     try:
+        # Limpeza para conversão baseada na planilha
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
         return 0.0
 
-# --- PROCESSAMENTO ---
+# --- PROCESSAMENTO DOS DADOS ---
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # Mapeamento: U(20)=Empurrador, V(21)=Previsto, X(23)=Real
+    # Mapeamento conforme image_0f58fd: U(20), V(21), X(23)
     df_fin = pd.DataFrame()
     df_fin['EMPURRADOR'] = df_raw.iloc[:, 20]
     df_fin['PREVISTO'] = df_raw.iloc[:, 21].apply(formatar_moeda)
     df_fin['REAL'] = df_raw.iloc[:, 23].apply(formatar_moeda)
-    
-    # Cálculo do Estouro: Real - Previsto
     df_fin['ESTOURO'] = df_fin['REAL'] - df_fin['PREVISTO']
     
     df_fin = df_fin[df_fin['EMPURRADOR'] != "E/M"].reset_index(drop=True)
 
-    st.title("📊 Raio X Financeiro: Orçado vs Estouro")
+    st.title("📊 **RAIO X FINANCEIRO: ORÇADO VS REAL**")
     
-    # --- GRÁFICO DE BARRAS COM ANÁLISE DE ESTOURO ---
+    # --- GRÁFICO DE BARRAS COM LETRAS EM NEGRITO ---
     fig = go.Figure()
 
-    # Barra do Orçado (V) - Azul Metalizado Vazado
+    # Barra do Orçado (V) - Azul Claro Vazado
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['PREVISTO'],
-        name='Orçado (Previsto)',
-        marker=dict(color='rgba(0, 102, 204, 0.3)', line=dict(color='rgb(0, 102, 204)', width=2)),
-        text=df_fin['PREVISTO'].apply(lambda x: f'R$ {x:,.0f}'),
-        textposition='inside'
+        name='**ORÇADO (PREVISTO)**',
+        marker=dict(color='rgba(135, 206, 235, 0.3)', line=dict(color='rgb(135, 206, 235)', width=2)),
+        text=df_fin['PREVISTO'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
+        textposition='inside',
+        textfont=dict(size=12, color="white")
     ))
 
     # Barra do Gasto Real (X) - Azul Sólido
     fig.add_trace(go.Bar(
         x=df_fin['EMPURRADOR'],
         y=df_fin['REAL'],
-        name='Gasto Real (Contábil)',
-        marker=dict(color='rgba(0, 102, 204, 0.8)'),
-        text=df_fin['REAL'].apply(lambda x: f'R$ {x:,.0f}'),
-        textposition='outside'
+        name='**GASTO REAL (CONTÁBIL)**',
+        marker=dict(color='rgba(0, 102, 204, 0.7)', line=dict(color='rgb(0, 102, 204)', width=2)),
+        text=df_fin['REAL'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'),
+        textposition='outside',
+        textfont=dict(size=13, color="white")
     ))
 
-    # Adicionando a "Anotação de Estouro" abaixo do eixo X
+    # Anotações de Estouro/Saldo em Negrito abaixo do eixo X
     for i, row in df_fin.iterrows():
-        if row['ESTOURO'] > 0:
-            fig.add_annotation(
-                x=row['EMPURRADOR'],
-                y=0,
-                text=f"🔴 ESTOURO:<br>R$ {row['ESTOURO']:,.2f}",
-                showarrow=False,
-                yshift=-50, # Joga para baixo do eixo X
-                font=dict(color="red", size=10),
-                bgcolor="rgba(255,0,0,0.1)"
-            )
-        elif row['ESTOURO'] < 0:
-             fig.add_annotation(
-                x=row['EMPURRADOR'],
-                y=0,
-                text=f"🟢 SALDO:<br>R$ {abs(row['ESTOURO']):,.2f}",
-                showarrow=False,
-                yshift=-50,
-                font=dict(color="#00FF00", size=10)
-            )
+        cor_texto = "red" if row['ESTOURO'] > 0 else "#00FF00"
+        prefixo = "ESTOURO" if row['ESTOURO'] > 0 else "SALDO"
+        
+        fig.add_annotation(
+            x=row['EMPURRADOR'],
+            y=0,
+            text=f"<b>{prefixo}:</b><br><b>R$ {abs(row['ESTOURO']):,.2f}</b>",
+            showarrow=False,
+            yshift=-60,
+            font=dict(color=cor_texto, size=11),
+            bgcolor="rgba(0,0,0,0.5)"
+        )
 
     fig.update_layout(
         template="plotly_dark",
         barmode='group',
-        height=700,
-        margin=dict(b=150), # Espaço maior embaixo para os valores de estouro
-        xaxis_title="Frota Zion",
-        yaxis_title="Valores em R$",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        height=750,
+        margin=dict(b=180, t=100),
+        xaxis=dict(tickfont=dict(size=14, family="Arial Black")), # Nomes dos empurradores em destaque
+        yaxis=dict(tickfont=dict(size=12), tickprefix="<b>R$ </b>"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, font=dict(size=14))
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- TABELA DE APOIO ---
+    # --- TABELA COM TEXTO EM NEGRITO ---
     st.divider()
+    st.markdown("### 📝 **DETALHAMENTO CONSOLIDADO (R$)**")
+    
+    # Estilizando a tabela para negrito
     st.dataframe(
         df_fin.style.format({
             'PREVISTO': 'R$ {:,.2f}', 
             'REAL': 'R$ {:,.2f}', 
             'ESTOURO': 'R$ {:,.2f}'
-        }),
-        use_container_width=True, hide_index=True
+        }).set_properties(**{'font-weight': 'bold'}),
+        use_container_width=True, 
+        hide_index=True
     )
