@@ -25,7 +25,7 @@ def limpar_valor(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # --- PARTE 1: EMPURRADORES (CÓDIGO PERFEITO) ---
+    # --- 1. GRÁFICOS DOS EMPURRADORES (O CÓDIGO PERFEITO) ---
     df_emp = pd.DataFrame()
     df_emp['EMPURRADOR'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df_emp['PREV_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -35,15 +35,6 @@ if not df_raw.empty:
     
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df_emp = df_emp[df_emp['EMPURRADOR'].isin(frota)].reset_index(drop=True)
-
-    # --- PARTE 2: DADOS DOS CICLOS (LINHA 3 VS LINHA 4 NO CÍRCULO AZUL) ---
-    nomes_ciclo = ["CICLO 1", "CICLO 2", "CICLO 3", "CICLO 4", "CICLO 5"]
-    
-    # Valores da Linha 3 (Gasto Real - AF a AJ)
-    v_real_ciclo = [limpar_valor(df_raw.iloc[1, c]) for c in range(31, 36)] 
-    
-    # Valores da Linha 4 (Círculo Azul - Disparidade)
-    v_disp_ciclo = [limpar_valor(df_raw.iloc[2, c]) for c in range(31, 36)]
 
     st.markdown("<h2 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION - REALIZADO VS ORÇADO</b></h2>", unsafe_allow_html=True)
 
@@ -70,36 +61,42 @@ if not df_raw.empty:
         fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=550, margin=dict(b=150), font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- NOVO GRÁFICO DE CICLOS (CORRIGIDO) ---
+    # --- 2. GRÁFICO DE CICLOS (CORREÇÃO DO VALUERROR) ---
     st.divider()
     st.markdown("<h3 style='text-align: center; color: black;'><b>CRUZAMENTO: GASTO REAL VS DISPARIDADE (CÍRCULO AZUL)</b></h3>", unsafe_allow_html=True)
     
+    nomes_ciclo = ["CICLO 1", "CICLO 2", "CICLO 3", "CICLO 4", "CICLO 5"]
+    v_real_ciclo = [limpar_valor(df_raw.iloc[1, c]) for c in range(31, 36)] # Gasto Real (Linha 3)
+    v_disp_ciclo = [limpar_valor(df_raw.iloc[2, c]) for c in range(31, 36)] # Disparidade (Linha 4)
+
     fig_ciclo = go.Figure()
 
-    # Linha do Gasto Real (Eixo Esquerdo)
+    # Adicionando Gasto Real (Eixo Y1)
     fig_ciclo.add_trace(go.Scatter(
-        x=nomes_ciclo, y=v_real_ciclo, mode='lines+markers+text', name='GASTO REAL',
-        line=dict(color='darkblue', width=4),
-        text=[f"R$ {v:,.0f}" for v in v_real_ciclo], textposition="top center"
+        x=nomes_ciclo, y=v_real_ciclo, mode='lines+markers+text', 
+        name='<b>GASTO REAL</b>', line=dict(color='darkblue', width=4),
+        text=[f"<b>R$ {v:,.0f}</b>" for v in v_real_ciclo], textposition="top center"
     ))
 
-    # Linha da Disparidade (Eixo Direito - Círculo Azul)
+    # Adicionando Disparidade (Eixo Y2) - Aqui é o segredo para não dar erro
     fig_ciclo.add_trace(go.Scatter(
-        x=nomes_ciclo, y=v_disp_ciclo, mode='lines+markers+text', name='DISPARIDADE (CÍRCULO AZUL)',
-        line=dict(color='red', width=4, dash='dot'),
-        text=[f"R$ {v:,.0f}" for v in v_disp_ciclo], textposition="bottom center",
+        x=nomes_ciclo, y=v_disp_ciclo, mode='lines+markers+text', 
+        name='<b>DISPARIDADE (AZUL)</b>', line=dict(color='red', width=4, dash='dot'),
+        text=[f"<b>R$ {v:,.0f}</b>" for v in v_disp_ciclo], textposition="bottom center",
         yaxis="y2"
     ))
 
-    # Configuração do Layout com Eixos Independentes para evitar o erro Value_Error
+    # Layout configurado peça por peça para evitar conflito de legendas e eixos
     fig_ciclo.update_layout(
         template="plotly_white", height=500,
         font=dict(color="black", family="Arial Black"),
-        yaxis=dict(title="Gasto Real (R$)", titlefont=dict(color="darkblue")),
-        yaxis2=dict(title="Disparidade (R$)", titlefont=dict(color="red"), overlaying='y', side='right'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        xaxis=dict(title="Ciclos de Operação"),
+        yaxis=dict(title="<b>Gasto Real (R$)</b>", titlefont=dict(color="darkblue")),
+        yaxis2=dict(title="<b>Disparidade (R$)</b>", titlefont=dict(color="red"), overlaying='y', side='right'),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
+    
     st.plotly_chart(fig_ciclo, use_container_width=True)
 
-    # Tabela de suporte final
+    # Tabela final
     st.dataframe(df_emp.style.format({'PREV_RS': 'R$ {:,.2f}', 'REAL_RS': 'R$ {:,.2f}', 'FORE_L': '{:,.0f} L', 'REAL_L': '{:,.0f} L'}).set_properties(**{'font-weight': 'bold', 'color': 'black'}), use_container_width=True, hide_index=True)
