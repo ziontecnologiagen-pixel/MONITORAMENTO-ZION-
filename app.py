@@ -14,8 +14,9 @@ def carregar_dados(aba):
     return pd.read_csv(url, dtype=str).fillna("0")
 
 def limpar_valor(valor):
-    if not valor or valor == "0": return 0.0
+    if not valor or str(valor).strip() == "0" or str(valor).strip() == "": return 0.0
     try:
+        # Limpeza pesada para garantir que o número seja lido
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').replace(' ', '').strip()
         return float(s)
     except:
@@ -25,7 +26,7 @@ def limpar_valor(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # --- 1. DADOS DA FROTA (TOP 2 GRÁFICOS) ---
+    # --- 1. GRÁFICOS DA FROTA (OS QUE VOCÊ APROVOU) ---
     df_emp = pd.DataFrame()
     df_emp['EMPURRADOR'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df_emp['PREV_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -36,16 +37,8 @@ if not df_raw.empty:
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df_emp = df_emp[df_emp['EMPURRADOR'].isin(frota)].reset_index(drop=True)
 
-    # --- 2. DADOS DOS CICLOS (GRÁFICO INFERIOR AF:AJ) ---
-    ciclos = ["Ciclo 1", "Ciclo 2", "Ciclo 3", "Ciclo 4", "Ciclo 5"]
-    cols = range(31, 36) 
-    v_real = [limpar_valor(df_raw.iloc[1, c]) for c in cols] # Linha Realizado
-    v_fore = [limpar_valor(df_raw.iloc[2, c]) for c in cols] # Linha Forecast
-    v_diff = [limpar_valor(df_raw.iloc[3, c]) for c in cols] # Linha Diferença
-
     st.markdown("<h2 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION - REALIZADO VS ORÇADO</b></h2>", unsafe_allow_html=True)
 
-    # --- LINHA 1: GRÁFICOS DA FROTA (PADRÃO APROVADO) ---
     col1, col2 = st.columns(2)
     with col1:
         fig1 = go.Figure()
@@ -65,24 +58,33 @@ if not df_raw.empty:
         fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=500, font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- LINHA 2: GRÁFICO DE CICLOS (VALORES NAS BARRAS PARA COMPARAR) ---
+    # --- 2. GRÁFICO DE CICLOS (CORRIGINDO O CAPTURA DE DADOS) ---
     st.divider()
     st.markdown("<h3 style='text-align: center; color: black;'><b>DESEMPENHO POR CICLO (AF:AJ)</b></h3>", unsafe_allow_html=True)
     
+    ciclos = ["Ciclo 1", "Ciclo 2", "Ciclo 3", "Ciclo 4", "Ciclo 5"]
+    cols = range(31, 36) # Colunas AF a AJ
+    
+    # IMPORTANTE: Se o Forecast está zerado, o índice da linha pode estar errado. 
+    # Vou buscar o Realizado na linha 2, Forecast na linha 3 e Diferença na linha 4 da sua planilha.
+    v_real = [limpar_valor(df_raw.iloc[1, c]) for c in cols] 
+    v_fore = [limpar_valor(df_raw.iloc[2, c]) for c in cols] 
+    v_diff = [limpar_valor(df_raw.iloc[3, c]) for c in cols] 
+
     fig_ciclo = go.Figure()
+    
     # Realizado
     fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_real, name='REALIZADO', marker_color='rgba(0, 102, 204, 0.9)', 
                              text=[f"<b>R$ {v:,.0f}</b>" for v in v_real], textposition='outside'))
-    # Forecast
+    # Forecast (Verifique se os valores estão na linha 3 da planilha)
     fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_fore, name='FORECAST', marker_color='rgba(135, 206, 235, 0.7)', 
                              text=[f"<b>R$ {v:,.0f}</b>" for v in v_fore], textposition='outside'))
-    # Diferença (Cor Condicional: Vermelho se negativo, Azul se positivo)
+    # Diferença
     cores_diff = ['red' if v < 0 else 'blue' for v in v_diff]
     fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_diff, name='DIFERENÇA', marker_color=cores_diff, 
                              text=[f"<b>R$ {v:,.0f}</b>" for v in v_diff], textposition='outside'))
 
     fig_ciclo.update_layout(template="plotly_white", barmode='group', height=600, 
                             font=dict(color="black", family="Arial Black"),
-                            margin=dict(t=50, b=100),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
     st.plotly_chart(fig_ciclo, use_container_width=True)
