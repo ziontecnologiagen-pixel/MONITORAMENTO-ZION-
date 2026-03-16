@@ -11,11 +11,13 @@ SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 @st.cache_data(ttl=2)
 def carregar_dados(aba):
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(aba)}"
+    # Lemos como string para não perder a formatação original
     return pd.read_csv(url, dtype=str).fillna("0")
 
 def limpar_valor(valor):
     if not valor or valor == "0": return 0.0
     try:
+        # Limpeza para R$ e Litros
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
@@ -36,18 +38,18 @@ if not df_raw.empty:
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df = df[df['EMPURRADOR'].isin(frota)].reset_index(drop=True)
 
-    # --- DADOS DOS CICLOS (AF1:AJ3) ---
-    # Capturando os valores de R$ da linha 3, colunas AF a AJ
-    valores_ciclo = [
-        limpar_valor(df_raw.iloc[2, 31]), # AF3
-        limpar_valor(df_raw.iloc[2, 32]), # AG3
-        limpar_valor(df_raw.iloc[2, 33]), # AH3
-        limpar_valor(df_raw.iloc[2, 34]), # AI3
-        limpar_valor(df_raw.iloc[2, 35])  # AJ3
-    ]
+    # --- DADOS DOS CICLOS (VALORES REAIS DA LINHA 3 - AF:AJ) ---
+    # Pegando exatamente os valores da sua imagem (R$ 990.311,50, etc.)
+    # Na API do Google Sheets (iloc), AF é coluna 31
     nomes_ciclo = ["CICLO 1", "CICLO 2", "CICLO 3", "CICLO 4", "CICLO 5"]
+    valores_ciclo = [
+        limpar_valor(df_raw.iloc[1, 31]), # Linha 3 (index 1), Coluna AF (31)
+        limpar_valor(df_raw.iloc[1, 32]), # Linha 3 (index 1), Coluna AG (32)
+        limpar_valor(df_raw.iloc[1, 33]), # Linha 3 (index 1), Coluna AH (33)
+        limpar_valor(df_raw.iloc[1, 34]), # Linha 3 (index 1), Coluna AI (34)
+        limpar_valor(df_raw.iloc[1, 35])  # Linha 3 (index 1), Coluna AJ (35)
+    ]
 
-    # Título do Painel
     st.markdown("<h2 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION - REALIZADO VS ORÇADO</b></h2>", unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
@@ -59,7 +61,7 @@ if not df_raw.empty:
         fig1.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['REAL_RS'], name='<b>REALIZADO</b>', marker_color='rgba(0, 102, 204, 0.9)', text=df['REAL_RS'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'), textposition='outside'))
         
         for i, r in df.iterrows():
-            diff = r['REAL_RS'] - r['ORC_RS'] if 'ORC_RS' in df else r['REAL_RS'] - r['PREV_RS']
+            diff = r['REAL_RS'] - r['PREV_RS']
             cor, txt = ("red", "ESTOURO") if diff > 0 else ("green", "SALDO")
             fig1.add_annotation(x=r['EMPURRADOR'], y=0, text=f"<b>{txt}:</b><br><b>R$ {abs(diff):,.2f}</b>", showarrow=False, yshift=-80, font=dict(color=cor, size=11))
 
@@ -80,7 +82,7 @@ if not df_raw.empty:
         fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=600, margin=dict(b=180), font=dict(color="black"), xaxis=dict(tickfont=dict(family="Arial Black", size=12)))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- NOVO: GRÁFICO DE LINHA POR CICLO (FINANCEIRO) ---
+    # --- GRÁFICO DE EVOLUÇÃO FINANCEIRA POR CICLO (LINHA) ---
     st.divider()
     st.markdown("<h3 style='text-align: center; color: black;'><b>EVOLUÇÃO FINANCEIRA POR CICLO</b></h3>", unsafe_allow_html=True)
     
@@ -89,21 +91,21 @@ if not df_raw.empty:
         x=nomes_ciclo, 
         y=valores_ciclo, 
         mode='lines+markers+text',
-        name='Gasto por Ciclo',
-        line=dict(color='blue', width=4),
-        marker=dict(size=12, color='darkblue'),
-        text=[f"<b>R$ {v:,.2f}</b>" for v in valores_ciclo],
-        textposition="top center"
+        text=[f"<b>R$ {v:,.0f}</b>" for v in valores_ciclo],
+        textposition="top center",
+        line=dict(color='blue', width=5),
+        marker=dict(size=12, color='darkblue', symbol='circle'),
+        name='Gasto'
     ))
 
     fig_linha.update_layout(
-        template="plotly_white", 
-        height=400, 
+        template="plotly_white",
+        height=500,
         font=dict(color="black", family="Arial Black"),
-        xaxis=dict(showgrid=True),
-        yaxis=dict(title="Valor em R$", showgrid=True)
+        xaxis=dict(showgrid=True, tickfont=dict(size=14)),
+        yaxis=dict(showgrid=True, title="Valor Acumulado (R$)")
     )
     st.plotly_chart(fig_linha, use_container_width=True)
 
-    # Tabela de suporte original
+    # Tabela final em negrito
     st.dataframe(df.style.format({'PREV_RS': 'R$ {:,.2f}', 'REAL_RS': 'R$ {:,.2f}', 'FORE_L': '{:,.0f} L', 'REAL_L': '{:,.0f} L'}).set_properties(**{'font-weight': 'bold', 'color': 'black'}), use_container_width=True, hide_index=True)
