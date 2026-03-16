@@ -11,13 +11,11 @@ SHEET_ID = "1izHisQGFCLdqQ7d2OSGkAM7gDJrIsLxW9FY741lJ_Ao"
 @st.cache_data(ttl=2)
 def carregar_dados(aba):
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(aba)}"
-    # Lemos como string para não perder a formatação original
     return pd.read_csv(url, dtype=str).fillna("0")
 
 def limpar_valor(valor):
     if not valor or valor == "0": return 0.0
     try:
-        # Limpeza para R$ e Litros
         s = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
         return float(s)
     except:
@@ -27,7 +25,7 @@ def limpar_valor(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # --- DADOS DOS EMPURRADORES (O CÓDIGO PERFEITO) ---
+    # --- PARTE 1: EMPURRADORES (CÓDIGO PERFEITO) ---
     df = pd.DataFrame()
     df['EMPURRADOR'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df['PREV_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -38,74 +36,70 @@ if not df_raw.empty:
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df = df[df['EMPURRADOR'].isin(frota)].reset_index(drop=True)
 
-    # --- DADOS DOS CICLOS (VALORES REAIS DA LINHA 3 - AF:AJ) ---
-    # Pegando exatamente os valores da sua imagem (R$ 990.311,50, etc.)
-    # Na API do Google Sheets (iloc), AF é coluna 31
+    # --- PARTE 2: DADOS DOS CICLOS (LINHA 3 VS LINHA 4 NO CÍRCULO AZUL) ---
     nomes_ciclo = ["CICLO 1", "CICLO 2", "CICLO 3", "CICLO 4", "CICLO 5"]
-    valores_ciclo = [
-        limpar_valor(df_raw.iloc[1, 31]), # Linha 3 (index 1), Coluna AF (31)
-        limpar_valor(df_raw.iloc[1, 32]), # Linha 3 (index 1), Coluna AG (32)
-        limpar_valor(df_raw.iloc[1, 33]), # Linha 3 (index 1), Coluna AH (33)
-        limpar_valor(df_raw.iloc[1, 34]), # Linha 3 (index 1), Coluna AI (34)
-        limpar_valor(df_raw.iloc[1, 35])  # Linha 3 (index 1), Coluna AJ (35)
-    ]
+    
+    # Valores da Linha 3 (Gasto Real)
+    v_linha_3 = [limpar_valor(df_raw.iloc[1, c]) for c in range(31, 36)] 
+    
+    # Valores da Linha 4 (Círculo Azul - Disparidade)
+    v_linha_4 = [limpar_valor(df_raw.iloc[2, c]) for c in range(31, 36)]
 
     st.markdown("<h2 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION - REALIZADO VS ORÇADO</b></h2>", unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
-
     with col1:
-        # --- GRÁFICO FINANCEIRO (R$) ---
+        # Gráfico Financeiro Original
         fig1 = go.Figure()
-        fig1.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['PREV_RS'], name='<b>ORÇADO</b>', marker_color='rgba(135, 206, 235, 0.7)', text=df['PREV_RS'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'), textposition='outside'))
-        fig1.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['REAL_RS'], name='<b>REALIZADO</b>', marker_color='rgba(0, 102, 204, 0.9)', text=df['REAL_RS'].apply(lambda x: f'<b>R$ {x:,.0f}</b>'), textposition='outside'))
-        
+        fig1.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['PREV_RS'], name='ORÇADO', marker_color='rgba(135, 206, 235, 0.7)'))
+        fig1.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['REAL_RS'], name='REALIZADO', marker_color='rgba(0, 102, 204, 0.9)'))
         for i, r in df.iterrows():
             diff = r['REAL_RS'] - r['PREV_RS']
             cor, txt = ("red", "ESTOURO") if diff > 0 else ("green", "SALDO")
             fig1.add_annotation(x=r['EMPURRADOR'], y=0, text=f"<b>{txt}:</b><br><b>R$ {abs(diff):,.2f}</b>", showarrow=False, yshift=-80, font=dict(color=cor, size=11))
-
-        fig1.update_layout(title="<b>COMPARAÇÃO FINANCEIRA (R$)</b>", template="plotly_white", barmode='group', height=600, margin=dict(b=180), font=dict(color="black"), xaxis=dict(tickfont=dict(family="Arial Black", size=12)))
+        fig1.update_layout(title="<b>COMPARAÇÃO FINANCEIRA (R$)</b>", template="plotly_white", barmode='group', height=600, margin=dict(b=180), font=dict(color="black"))
         st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
-        # --- GRÁFICO DE CONSUMO (LITROS) ---
+        # Gráfico de Consumo Original
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['FORE_L'], name='<b>FORECAST</b>', marker_color='rgba(135, 206, 235, 0.7)', text=df['FORE_L'].apply(lambda x: f'<b>{x:,.0f} L</b>'), textposition='outside'))
-        fig2.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['REAL_L'], name='<b>REAL (ODM)</b>', marker_color='rgba(0, 102, 204, 0.9)', text=df['REAL_L'].apply(lambda x: f'<b>{x:,.0f} L</b>'), textposition='outside'))
-        
+        fig2.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['FORE_L'], name='FORECAST', marker_color='rgba(135, 206, 235, 0.7)'))
+        fig2.add_trace(go.Bar(x=df['EMPURRADOR'], y=df['REAL_L'], name='REAL (ODM)', marker_color='rgba(0, 102, 204, 0.9)'))
         for i, r in df.iterrows():
             diff_l = r['REAL_L'] - r['FORE_L']
             cor_l, txt_l = ("red", "ESTOURO") if diff_l > 0 else ("green", "SALDO")
             fig2.add_annotation(x=r['EMPURRADOR'], y=0, text=f"<b>{txt_l}:</b><br><b>{abs(diff_l):,.0f} L</b>", showarrow=False, yshift=-80, font=dict(color=cor_l, size=11))
-
-        fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=600, margin=dict(b=180), font=dict(color="black"), xaxis=dict(tickfont=dict(family="Arial Black", size=12)))
+        fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=600, margin=dict(b=180), font=dict(color="black"))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- GRÁFICO DE EVOLUÇÃO FINANCEIRA POR CICLO (LINHA) ---
+    # --- GRÁFICO DE CICLOS COM DOIS EIXOS Y (DISPARIDADE) ---
     st.divider()
-    st.markdown("<h3 style='text-align: center; color: black;'><b>EVOLUÇÃO FINANCEIRA POR CICLO</b></h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: black;'><b>EVOLUÇÃO E DISPARIDADE POR CICLO</b></h3>", unsafe_allow_html=True)
     
-    fig_linha = go.Figure()
-    fig_linha.add_trace(go.Scatter(
-        x=nomes_ciclo, 
-        y=valores_ciclo, 
-        mode='lines+markers+text',
-        text=[f"<b>R$ {v:,.0f}</b>" for v in valores_ciclo],
-        textposition="top center",
-        line=dict(color='blue', width=5),
-        marker=dict(size=12, color='darkblue', symbol='circle'),
-        name='Gasto'
+    fig_ciclo = go.Figure()
+
+    # Linha 1: Gasto Real (Eixo Y Esquerda)
+    fig_ciclo.add_trace(go.Scatter(
+        x=nomes_ciclo, y=v_linha_3, mode='lines+markers+text', name='GASTO REAL (L3)',
+        line=dict(color='darkblue', width=4),
+        text=[f"R$ {v:,.0f}" for v in v_linha_3], textposition="top center"
     ))
 
-    fig_linha.update_layout(
-        template="plotly_white",
-        height=500,
-        font=dict(color="black", family="Arial Black"),
-        xaxis=dict(showgrid=True, tickfont=dict(size=14)),
-        yaxis=dict(showgrid=True, title="Valor Acumulado (R$)")
-    )
-    st.plotly_chart(fig_linha, use_container_width=True)
+    # Linha 2: Disparidade (Eixo Y Direita)
+    fig_ciclo.add_trace(go.Scatter(
+        x=nomes_ciclo, y=v_linha_4, mode='lines+markers+text', name='DISPARIDADE (L4)',
+        line=dict(color='red', width=4, dash='dot'),
+        text=[f"R$ {v:,.0f}" for v in v_linha_4], textposition="bottom center",
+        yaxis="y2"
+    ))
 
-    # Tabela final em negrito
+    fig_ciclo.update_layout(
+        template="plotly_white", height=550,
+        font=dict(color="black", family="Arial Black"),
+        yaxis=dict(title="Gasto Real (R$)", titlefont=dict(color="darkblue"), tickfont=dict(color="darkblue")),
+        yaxis2=dict(title="Disparidade (R$)", titlefont=dict(color="red"), tickfont=dict(color="red"), overlaying='y', side='right'),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_ciclo, use_container_width=True)
+
     st.dataframe(df.style.format({'PREV_RS': 'R$ {:,.2f}', 'REAL_RS': 'R$ {:,.2f}', 'FORE_L': '{:,.0f} L', 'REAL_L': '{:,.0f} L'}).set_properties(**{'font-weight': 'bold', 'color': 'black'}), use_container_width=True, hide_index=True)
