@@ -25,7 +25,7 @@ def limpar_valor(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # --- 1. GRÁFICOS DOS EMPURRADORES (O CÓDIGO PERFEITO) ---
+    # --- 1. GRÁFICOS DOS EMPURRADORES (O CÓDIGO PERFEITO QUE VOCÊ APROVOU) ---
     df_emp = pd.DataFrame()
     df_emp['EMPURRADOR'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df_emp['PREV_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -61,42 +61,45 @@ if not df_raw.empty:
         fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=550, margin=dict(b=150), font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- 2. GRÁFICO DE CICLOS (CORREÇÃO DO VALUERROR) ---
+    # --- 2. GRÁFICO DE CICLOS (SEM O ERRO VALUEERROR) ---
     st.divider()
-    st.markdown("<h3 style='text-align: center; color: black;'><b>CRUZAMENTO: GASTO REAL VS DISPARIDADE (CÍRCULO AZUL)</b></h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: black;'><b>CRUZAMENTO: GASTO REAL VS DISPARIDADE</b></h3>", unsafe_allow_html=True)
     
     nomes_ciclo = ["CICLO 1", "CICLO 2", "CICLO 3", "CICLO 4", "CICLO 5"]
-    v_real_ciclo = [limpar_valor(df_raw.iloc[1, c]) for c in range(31, 36)] # Gasto Real (Linha 3)
-    v_disp_ciclo = [limpar_valor(df_raw.iloc[2, c]) for c in range(31, 36)] # Disparidade (Linha 4)
+    
+    # Linha 3 da planilha (Gasto Real)
+    v_real = [limpar_valor(df_raw.iloc[1, c]) for c in range(31, 36)] 
+    # Linha 4 da planilha (Círculo Azul - Disparidade)
+    v_disp = [limpar_valor(df_raw.iloc[2, c]) for c in range(31, 36)]
 
     fig_ciclo = go.Figure()
 
-    # Adicionando Gasto Real (Eixo Y1)
+    # Linha 1: Gasto Real (Eixo Y Esquerdo)
     fig_ciclo.add_trace(go.Scatter(
-        x=nomes_ciclo, y=v_real_ciclo, mode='lines+markers+text', 
-        name='<b>GASTO REAL</b>', line=dict(color='darkblue', width=4),
-        text=[f"<b>R$ {v:,.0f}</b>" for v in v_real_ciclo], textposition="top center"
+        x=nomes_ciclo, y=v_real, mode='lines+markers+text', name='GASTO REAL',
+        line=dict(color='darkblue', width=4),
+        text=[f"<b>R$ {v:,.0f}</b>" for v in v_real], textposition="top center"
     ))
 
-    # Adicionando Disparidade (Eixo Y2) - Aqui é o segredo para não dar erro
+    # Linha 2: Disparidade (Eixo Y Direito)
     fig_ciclo.add_trace(go.Scatter(
-        x=nomes_ciclo, y=v_disp_ciclo, mode='lines+markers+text', 
-        name='<b>DISPARIDADE (AZUL)</b>', line=dict(color='red', width=4, dash='dot'),
-        text=[f"<b>R$ {v:,.0f}</b>" for v in v_disp_ciclo], textposition="bottom center",
+        x=nomes_ciclo, y=v_disp, mode='lines+markers+text', name='DISPARIDADE',
+        line=dict(color='red', width=4, dash='dot'),
+        text=[f"<b>R$ {v:,.0f}</b>" for v in v_disp], textposition="bottom center",
         yaxis="y2"
     ))
 
-    # Layout configurado peça por peça para evitar conflito de legendas e eixos
+    # CONFIGURAÇÃO DE LAYOUT BLINDADA (EVITA O ERRO DE EXECUÇÃO)
     fig_ciclo.update_layout(
-        template="plotly_white", height=500,
+        template="plotly_white",
+        height=500,
         font=dict(color="black", family="Arial Black"),
-        xaxis=dict(title="Ciclos de Operação"),
-        yaxis=dict(title="<b>Gasto Real (R$)</b>", titlefont=dict(color="darkblue")),
-        yaxis2=dict(title="<b>Disparidade (R$)</b>", titlefont=dict(color="red"), overlaying='y', side='right'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        yaxis=dict(title="Gasto Real (R$)", side="left"),
+        yaxis2=dict(title="Disparidade (R$)", side="right", overlaying="y", showgrid=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
     
     st.plotly_chart(fig_ciclo, use_container_width=True)
 
-    # Tabela final
+    # Tabela Final
     st.dataframe(df_emp.style.format({'PREV_RS': 'R$ {:,.2f}', 'REAL_RS': 'R$ {:,.2f}', 'FORE_L': '{:,.0f} L', 'REAL_L': '{:,.0f} L'}).set_properties(**{'font-weight': 'bold', 'color': 'black'}), use_container_width=True, hide_index=True)
