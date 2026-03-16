@@ -25,7 +25,7 @@ def limpar_valor(valor):
 df_raw = carregar_dados("ODM MARÇO")
 
 if not df_raw.empty:
-    # --- 1. OS DOIS GRÁFICOS PERFEITOS (FROTA) ---
+    # --- 1. DADOS DOS EMPURRADORES (OS GRÁFICOS QUE JÁ ESTAVAM PERFEITOS) ---
     df_emp = pd.DataFrame()
     df_emp['EMPURRADOR'] = df_raw.iloc[:, 20].str.strip().str.upper()
     df_emp['PREV_RS'] = df_raw.iloc[:, 21].apply(limpar_valor)
@@ -36,8 +36,16 @@ if not df_raw.empty:
     frota = ['CUMARU', 'AROEIRA', 'IPE', 'JACARANDA', 'ANGICO', 'CANJERANA', 'LUIZ FELIPE', 'BRENO']
     df_emp = df_emp[df_emp['EMPURRADOR'].isin(frota)].reset_index(drop=True)
 
+    # --- 2. DADOS DOS CICLOS (LINHAS DA TABELA AF:AJ) ---
+    ciclos = ["Ciclo 1", "Ciclo 2", "Ciclo 3", "Ciclo 4", "Ciclo 5"]
+    cols = range(31, 36) # Colunas AF até AJ
+    v_real = [limpar_valor(df_raw.iloc[1, c]) for c in cols] # Linha Realizado
+    v_fore = [limpar_valor(df_raw.iloc[2, c]) for c in cols] # Linha Forecast
+    v_diff = [limpar_valor(df_raw.iloc[3, c]) for c in cols] # Linha Diferença
+
     st.markdown("<h2 style='text-align: center; color: black;'><b>PAINEL DE PERFORMANCE ZION - REALIZADO VS ORÇADO</b></h2>", unsafe_allow_html=True)
 
+    # --- LINHA 1: GRÁFICOS DA FROTA ---
     col1, col2 = st.columns(2)
     with col1:
         # FINANCEIRO (R$)
@@ -63,25 +71,21 @@ if not df_raw.empty:
         fig2.update_layout(title="<b>COMPARAÇÃO DE CONSUMO (LITROS)</b>", template="plotly_white", barmode='group', height=550, margin=dict(b=150), font=dict(color="black", family="Arial Black"))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- 2. NOVO GRÁFICO DE CICLO (CONFORME SUA EXPLICAÇÃO) ---
+    # --- LINHA 2: GRÁFICO DE CICLOS (O NOVO AJUSTE) ---
     st.divider()
     st.markdown("<h3 style='text-align: center; color: black;'><b>DESEMPENHO POR CICLO (AF:AJ)</b></h3>", unsafe_allow_html=True)
     
-    ciclos = ["Ciclo 1", "Ciclo 2", "Ciclo 3", "Ciclo 4", "Ciclo 5"]
-    cols = range(31, 36) 
-    v_real = [limpar_valor(df_raw.iloc[1, c]) for c in cols] # Linha Realizado
-    v_fore = [limpar_valor(df_raw.iloc[2, c]) for c in cols] # Linha Forecast
-    v_diff = [limpar_valor(df_raw.iloc[3, c]) for c in cols] # Linha Diferença
-
     fig_ciclo = go.Figure()
-    fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_real, name='REALIZADO', marker_color='darkblue', text=[f"<b>R$ {v:,.0f}</b>" for v in v_real], textposition='outside'))
-    fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_fore, name='FORECAST', marker_color='lightblue', text=[f"<b>R$ {v:,.0f}</b>" for v in v_fore], textposition='outside'))
-    
+    # Barra 1: Realizado
+    fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_real, name='REALIZADO', marker_color='rgba(0, 102, 204, 0.9)', text=[f"<b>R$ {v:,.0f}</b>" for v in v_real], textposition='outside'))
+    # Barra 2: Forecast
+    fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_fore, name='FORECAST', marker_color='rgba(135, 206, 235, 0.7)', text=[f"<b>R$ {v:,.0f}</b>" for v in v_fore], textposition='outside'))
+    # Barra 3: Diferença com Cor Condicional
     cores_diff = ['red' if v < 0 else 'blue' for v in v_diff]
     fig_ciclo.add_trace(go.Bar(x=ciclos, y=v_diff, name='DIFERENÇA', marker_color=cores_diff, text=[f"<b>R$ {v:,.0f}</b>" for v in v_diff], textposition='outside'))
 
-    fig_ciclo.update_layout(template="plotly_white", barmode='group', height=500, font=dict(color="black", family="Arial Black"), margin=dict(b=100))
+    fig_ciclo.update_layout(template="plotly_white", barmode='group', height=550, font=dict(color="black", family="Arial Black"), margin=dict(b=100))
     st.plotly_chart(fig_ciclo, use_container_width=True)
 
-    # Tabela de suporte
+    # Tabela de dados brutos da frota embaixo
     st.dataframe(df_emp.style.format({'PREV_RS': 'R$ {:,.2f}', 'REAL_RS': 'R$ {:,.2f}', 'FORE_L': '{:,.0f} L', 'REAL_L': '{:,.0f} L'}).set_properties(**{'font-weight': 'bold', 'color': 'black'}), use_container_width=True, hide_index=True)
